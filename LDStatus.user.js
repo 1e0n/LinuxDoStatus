@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
 // @grant        GM_xmlhttpRequest
 // @connect      connect.linux.do
+// @updateURL    https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js
+// @downloadURL  https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js
 // ==/UserScript==
 
 (function() {
