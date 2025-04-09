@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.2
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       You
 // @match        https://linux.do/*
@@ -131,6 +131,14 @@
             text-align: center;
             padding: 10px;
             color: #a0aec0;
+        }
+
+        .increase {
+            color: #ffd700; /* 黄色 */
+        }
+
+        .decrease {
+            color: #4299e1; /* 蓝色 */
         }
     `;
     document.head.appendChild(style);
@@ -270,11 +278,37 @@
                 const required = cells[2].textContent.trim();
                 const isSuccess = cells[1].classList.contains('text-green-500');
 
+                // 提取当前完成数的数字部分
+                const currentMatch = current.match(/(\d+)/);
+                const currentValue = currentMatch ? parseInt(currentMatch[1], 10) : 0;
+
+                // 查找上一次的数据记录
+                let changeValue = 0;
+                let hasChanged = false;
+
+                if (previousRequirements.length > 0) {
+                    const prevReq = previousRequirements.find(pr => pr.name === name);
+                    if (prevReq) {
+                        // 如果完成数有变化，更新变化值
+                        if (currentValue !== prevReq.currentValue) {
+                            changeValue = currentValue - prevReq.currentValue;
+                            hasChanged = true;
+                        } else if (prevReq.changeValue) {
+                            // 如果完成数没有变化，但之前有变化值，保留之前的变化值
+                            changeValue = prevReq.changeValue;
+                            hasChanged = true;
+                        }
+                    }
+                }
+
                 requirements.push({
                     name,
                     current,
                     required,
-                    isSuccess
+                    isSuccess,
+                    currentValue,
+                    changeValue,  // 变化值
+                    hasChanged    // 是否有变化
                 });
             }
         }
@@ -285,6 +319,9 @@
 
         // 渲染数据
         renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements);
+
+        // 保存当前数据作为下次比较的基准
+        previousRequirements = [...requirements];
     }
 
     // 渲染信任级别数据
@@ -320,10 +357,21 @@
             if (currentMatch) current = currentMatch[1];
             if (requiredMatch) required = requiredMatch[1];
 
+            // 添加目标完成数变化的标识
+            let changeIndicator = '';
+            if (req.hasChanged) {
+                const diff = req.changeValue;
+                if (diff > 0) {
+                    changeIndicator = `<span class="increase"> ⬆${diff}</span>`; // 增加标识，黄色
+                } else if (diff < 0) {
+                    changeIndicator = `<span class="decrease"> ⬇${Math.abs(diff)}</span>`; // 减少标识，蓝色
+                }
+            }
+
             html += `
                 <div class="trust-level-item ${req.isSuccess ? 'success' : 'fail'}">
                     <span class="name">${name}</span>
-                    <span class="value">${current} / ${required}</span>
+                    <span class="value">${current}${changeIndicator} / ${required}</span>
                 </div>
             `;
         });
@@ -331,9 +379,12 @@
         content.innerHTML = html;
     }
 
+    // 存储上一次获取的数据，用于比较变化
+    let previousRequirements = [];
+
     // 初始加载
     fetchTrustLevelData();
 
-    // 定时刷新（每分钟）
-    setInterval(fetchTrustLevelData, 60000);
+    // 定时刷新（每两分钟）
+    setInterval(fetchTrustLevelData, 120000);
 })();
