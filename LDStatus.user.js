@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  在 Linux.do 页面显示信任级别进度
-// @author       You
+// @author       1e0n
 // @match        https://linux.do/*
 // @grant        GM_xmlhttpRequest
 // @connect      connect.linux.do
@@ -139,6 +139,35 @@
 
         .ld-decrease {
             color: #4299e1; /* 蓝色 */
+        }
+
+        .ld-daily-stats {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #4a5568;
+            font-size: 11px;
+        }
+
+        .ld-daily-stats-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #a0aec0;
+        }
+
+        .ld-daily-stats-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .ld-daily-stats-item .ld-name {
+            flex: 0 1 auto;
+        }
+
+        .ld-daily-stats-item .ld-value {
+            flex: 0 0 auto;
+            font-weight: bold;
+            color: #68d391;
         }
     `;
     document.head.appendChild(style);
@@ -317,15 +346,18 @@
         const resultText = trustLevelSection.querySelector('p.text-red-500, p.text-green-500');
         const isMeetingRequirements = resultText ? !resultText.classList.contains('text-red-500') : false;
 
+        // 存储24小时内的数据变化
+        const dailyChanges = saveDailyStats(requirements);
+
         // 渲染数据
-        renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements);
+        renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements, dailyChanges);
 
         // 保存当前数据作为下次比较的基准
         previousRequirements = [...requirements];
     }
 
     // 渲染信任级别数据
-    function renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements) {
+    function renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements, dailyChanges = {}) {
         let html = `
             <div style="margin-bottom: 8px; font-weight: bold;">
                 ${username} - 信任级别 ${targetLevel}
@@ -376,11 +408,117 @@
             `;
         });
 
+        // 添加24小时内的活动数据显示
+        html += `
+            <div class="ld-daily-stats">
+                <div class="ld-daily-stats-title">24小时内的活动</div>
+        `;
+
+        // 添加每个数据项
+        const dailyStatsItems = [
+            { name: '浏览话题', key: '浏览的话题（所有时间）' },
+            { name: '回复话题', key: '回复的话题' },
+            { name: '已读帖子', key: '已读帖子（所有时间）' },
+            { name: '获得点赞', key: '获赞：点赞用户数量' },
+            { name: '点赞帖子', key: '点赞的帖子' }
+        ];
+
+        dailyStatsItems.forEach(item => {
+            const value = dailyChanges[item.key] || 0;
+            html += `
+                <div class="ld-daily-stats-item">
+                    <span class="ld-name">${item.name}</span>
+                    <span class="ld-value">${value}</span>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+
         content.innerHTML = html;
     }
 
     // 存储上一次获取的数据，用于比较变化
     let previousRequirements = [];
+
+    // 存储24小时内的数据变化
+    function saveDailyStats(requirements) {
+        // 定义要跟踪的数据项
+        const statsToTrack = [
+            '浏览的话题（所有时间）', // 浏览话题总数
+            '回复的话题', // 回复话题数
+            '已读帖子（所有时间）', // 已读帖子总数
+            '获赞：点赞用户数量', // 获赞数
+            '点赞的帖子' // 点赞数
+        ];
+
+        // 获取当前时间
+        const now = new Date().getTime();
+
+        // 从 localStorage 中获取已存储的数据
+        let dailyStats = JSON.parse(localStorage.getItem('ld_daily_stats') || '[]');
+
+        // 删除超过24小时的数据
+        const oneDayAgo = now - 24 * 60 * 60 * 1000;
+        dailyStats = dailyStats.filter(item => item.timestamp > oneDayAgo);
+
+        // 对于每个要跟踪的数据项，找到当前值并添加到历史记录中
+        statsToTrack.forEach(statName => {
+            const req = requirements.find(r => r.name === statName);
+            if (req) {
+                // 添加新的数据点
+                dailyStats.push({
+                    name: statName,
+                    value: req.currentValue,
+                    timestamp: now
+                });
+            }
+        });
+
+        // 将更新后的数据保存回 localStorage
+        localStorage.setItem('ld_daily_stats', JSON.stringify(dailyStats));
+
+        return calculateDailyChanges(dailyStats);
+    }
+
+    // 计箞24小时内的变化量
+    function calculateDailyChanges(dailyStats) {
+        // 定义要跟踪的数据项
+        const statsToTrack = [
+            '浏览的话题（所有时间）', // 浏览话题总数
+            '回复的话题', // 回复话题数
+            '已读帖子（所有时间）', // 已读帖子总数
+            '获赞：点赞用户数量', // 获赞数
+            '点赞的帖子' // 点赞数
+        ];
+
+        const result = {};
+
+        // 对于每个要跟踪的数据项，计算24小时内的变化
+        statsToTrack.forEach(statName => {
+            // 过滤出当前数据项的所有记录，并按时间戳排序
+            const statRecords = dailyStats
+                .filter(item => item.name === statName)
+                .sort((a, b) => a.timestamp - b.timestamp);
+
+            if (statRecords.length >= 2) {
+                // 获取最早和最新的记录
+                const oldest = statRecords[0];
+                const newest = statRecords[statRecords.length - 1];
+
+                // 计算变化量
+                const change = newest.value - oldest.value;
+
+                // 存储结果
+                result[statName] = change;
+            } else {
+                // 如果没有足够的数据点，设置为0
+                result[statName] = 0;
+            }
+        });
+
+        return result;
+    }
 
     // 初始加载
     fetchTrustLevelData();
