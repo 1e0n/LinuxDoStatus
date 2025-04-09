@@ -396,9 +396,9 @@
             if (req.hasChanged) {
                 const diff = req.changeValue;
                 if (diff > 0) {
-                    changeIndicator = `<span class="ld-increase"> ⬆${diff}</span>`; // 增加标识，黄色
+                    changeIndicator = `<span class="ld-increase"> ▲${diff}</span>`; // 增加标识，黄色
                 } else if (diff < 0) {
-                    changeIndicator = `<span class="ld-decrease"> ⬇${Math.abs(diff)}</span>`; // 减少标识，蓝色
+                    changeIndicator = `<span class="ld-decrease"> ▼${Math.abs(diff)}</span>`; // 减少标识，蓝色
                 }
             }
 
