@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       You
 // @match        https://linux.do/*
@@ -12,10 +12,10 @@
 (function() {
     'use strict';
 
-    // 创建样式
+    // 创建样式 - 使用更特定的选择器以避免影响帖子界面的按钮
     const style = document.createElement('style');
     style.textContent = `
-        #trust-level-panel {
+        #ld-trust-level-panel {
             position: fixed;
             left: 10px;
             top: 100px;
@@ -31,7 +31,7 @@
             font-size: 12px;
         }
 
-        #trust-level-header {
+        #ld-trust-level-header {
             background-color: #1a202c;
             color: white;
             padding: 8px 10px;
@@ -42,13 +42,13 @@
             user-select: none;
         }
 
-        #trust-level-content {
+        #ld-trust-level-content {
             padding: 10px;
             max-height: none;
             overflow-y: visible;
         }
 
-        .trust-level-item {
+        .ld-trust-level-item {
             margin-bottom: 6px;
             display: flex;
             white-space: nowrap;
@@ -56,29 +56,29 @@
             justify-content: space-between;
         }
 
-        .trust-level-item .name {
+        .ld-trust-level-item .ld-name {
             flex: 0 1 auto;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 60%;
         }
 
-        .trust-level-item .value {
+        .ld-trust-level-item .ld-value {
             font-weight: bold;
             flex: 0 0 auto;
             text-align: right;
             min-width: 70px;
         }
 
-        .trust-level-item.success .value {
+        .ld-trust-level-item.ld-success .ld-value {
             color: #68d391;
         }
 
-        .trust-level-item.fail .value {
+        .ld-trust-level-item.ld-fail .ld-value {
             color: #fc8181;
         }
 
-        .toggle-btn, .refresh-btn {
+        .ld-toggle-btn, .ld-refresh-btn {
             background: none;
             border: none;
             color: white;
@@ -87,7 +87,7 @@
             margin-left: 5px;
         }
 
-        .collapsed {
+        .ld-collapsed {
             width: 40px !important;
             height: 40px !important;
             min-width: 40px !important;
@@ -97,7 +97,7 @@
             transform: none !important;
         }
 
-        .collapsed #trust-level-header {
+        .ld-collapsed #ld-trust-level-header {
             justify-content: center;
             width: 40px !important;
             height: 40px !important;
@@ -108,16 +108,16 @@
             align-items: center;
         }
 
-        .collapsed #trust-level-content {
+        .ld-collapsed #ld-trust-level-content {
             display: none !important;
         }
 
-        .collapsed #trust-level-header div:first-child,
-        .collapsed .refresh-btn {
+        .ld-collapsed #ld-trust-level-header div:first-child,
+        .ld-collapsed .ld-refresh-btn {
             display: none !important;
         }
 
-        .collapsed .toggle-btn {
+        .ld-collapsed .ld-toggle-btn {
             margin: 0;
             font-size: 16px;
             display: flex;
@@ -127,17 +127,17 @@
             height: 100%;
         }
 
-        .loading {
+        .ld-loading {
             text-align: center;
             padding: 10px;
             color: #a0aec0;
         }
 
-        .increase {
+        .ld-increase {
             color: #ffd700; /* 黄色 */
         }
 
-        .decrease {
+        .ld-decrease {
             color: #4299e1; /* 蓝色 */
         }
     `;
@@ -145,23 +145,23 @@
 
     // 创建面板
     const panel = document.createElement('div');
-    panel.id = 'trust-level-panel';
+    panel.id = 'ld-trust-level-panel';
 
     // 创建面板头部
     const header = document.createElement('div');
-    header.id = 'trust-level-header';
+    header.id = 'ld-trust-level-header';
     header.innerHTML = `
         <div>信任级别进度</div>
         <div>
-            <button class="refresh-btn" title="刷新数据">🔄</button>
-            <button class="toggle-btn" title="展开/收起">◀</button>
+            <button class="ld-refresh-btn" title="刷新数据">🔄</button>
+            <button class="ld-toggle-btn" title="展开/收起">◀</button>
         </div>
     `;
 
     // 创建内容区域
     const content = document.createElement('div');
-    content.id = 'trust-level-content';
-    content.innerHTML = '<div class="loading">加载中...</div>';
+    content.id = 'ld-trust-level-content';
+    content.innerHTML = '<div class="ld-loading">加载中...</div>';
 
     // 组装面板
     panel.appendChild(header);
@@ -173,7 +173,7 @@
     let lastX, lastY;
 
     header.addEventListener('mousedown', (e) => {
-        if (panel.classList.contains('collapsed')) return;
+        if (panel.classList.contains('ld-collapsed')) return;
 
         isDragging = true;
         lastX = e.clientX;
@@ -212,19 +212,19 @@
     });
 
     // 展开/收起功能
-    const toggleBtn = header.querySelector('.toggle-btn');
+    const toggleBtn = header.querySelector('.ld-toggle-btn');
     toggleBtn.addEventListener('click', () => {
-        panel.classList.toggle('collapsed');
-        toggleBtn.textContent = panel.classList.contains('collapsed') ? '▶' : '◀';
+        panel.classList.toggle('ld-collapsed');
+        toggleBtn.textContent = panel.classList.contains('ld-collapsed') ? '▶' : '◀';
     });
 
     // 刷新按钮
-    const refreshBtn = header.querySelector('.refresh-btn');
+    const refreshBtn = header.querySelector('.ld-refresh-btn');
     refreshBtn.addEventListener('click', fetchTrustLevelData);
 
     // 获取信任级别数据
     function fetchTrustLevelData() {
-        content.innerHTML = '<div class="loading">加载中...</div>';
+        content.innerHTML = '<div class="ld-loading">加载中...</div>';
 
         GM_xmlhttpRequest({
             method: 'GET',
@@ -233,11 +233,11 @@
                 if (response.status === 200) {
                     parseTrustLevelData(response.responseText);
                 } else {
-                    content.innerHTML = '<div class="loading">获取数据失败，请稍后再试</div>';
+                    content.innerHTML = '<div class="ld-loading">获取数据失败，请稍后再试</div>';
                 }
             },
             onerror: function() {
-                content.innerHTML = '<div class="loading">获取数据失败，请稍后再试</div>';
+                content.innerHTML = '<div class="ld-loading">获取数据失败，请稍后再试</div>';
             }
         });
     }
@@ -254,7 +254,7 @@
         });
 
         if (!trustLevelSection) {
-            content.innerHTML = '<div class="loading">未找到信任级别数据，请确保已登录</div>';
+            content.innerHTML = '<div class="ld-loading">未找到信任级别数据，请确保已登录</div>';
             return;
         }
 
@@ -362,16 +362,16 @@
             if (req.hasChanged) {
                 const diff = req.changeValue;
                 if (diff > 0) {
-                    changeIndicator = `<span class="increase"> ⬆${diff}</span>`; // 增加标识，黄色
+                    changeIndicator = `<span class="ld-increase"> ⬆${diff}</span>`; // 增加标识，黄色
                 } else if (diff < 0) {
-                    changeIndicator = `<span class="decrease"> ⬇${Math.abs(diff)}</span>`; // 减少标识，蓝色
+                    changeIndicator = `<span class="ld-decrease"> ⬇${Math.abs(diff)}</span>`; // 减少标识，蓝色
                 }
             }
 
             html += `
-                <div class="trust-level-item ${req.isSuccess ? 'success' : 'fail'}">
-                    <span class="name">${name}</span>
-                    <span class="value">${current}${changeIndicator} / ${required}</span>
+                <div class="ld-trust-level-item ${req.isSuccess ? 'ld-success' : 'ld-fail'}">
+                    <span class="ld-name">${name}</span>
+                    <span class="ld-value">${current}${changeIndicator} / ${required}</span>
                 </div>
             `;
         });
