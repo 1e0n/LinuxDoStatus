@@ -8,6 +8,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_info
 // @connect      connect.linux.do
 // @updateURL    https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js
 // @downloadURL  https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js
@@ -82,12 +83,18 @@
             color: #fc8181;
         }
 
-        .ld-toggle-btn, .ld-refresh-btn {
+        .ld-toggle-btn, .ld-refresh-btn, .ld-update-btn {
             background: none;
             border: none;
             color: white;
             cursor: pointer;
             font-size: 14px;
+            margin-left: 5px;
+        }
+
+        .ld-version {
+            font-size: 10px;
+            color: #a0aec0;
             margin-left: 5px;
         }
 
@@ -117,7 +124,9 @@
         }
 
         .ld-collapsed #ld-trust-level-header div:first-child,
-        .ld-collapsed .ld-refresh-btn {
+        .ld-collapsed .ld-refresh-btn,
+        .ld-collapsed .ld-update-btn,
+        .ld-collapsed .ld-version {
             display: none !important;
         }
 
@@ -184,12 +193,16 @@
     const panel = document.createElement('div');
     panel.id = 'ld-trust-level-panel';
 
+    // 获取脚本版本号
+    const scriptVersion = GM_info.script.version;
+
     // 创建面板头部
     const header = document.createElement('div');
     header.id = 'ld-trust-level-header';
     header.innerHTML = `
-        <div>信任级别进度</div>
+        <div>信任级别进度<span class="ld-version">v${scriptVersion}</span></div>
         <div>
+            <button class="ld-update-btn" title="检查更新">🔎</button>
             <button class="ld-refresh-btn" title="刷新数据">🔄</button>
             <button class="ld-toggle-btn" title="展开/收起">◀</button>
         </div>
@@ -297,6 +310,78 @@
     // 刷新按钮
     const refreshBtn = header.querySelector('.ld-refresh-btn');
     refreshBtn.addEventListener('click', fetchTrustLevelData);
+
+    // 检查更新按钮
+    const updateBtn = header.querySelector('.ld-update-btn');
+    updateBtn.addEventListener('click', checkForUpdates);
+
+    // 检查脚本更新
+    function checkForUpdates() {
+        const updateURL = 'https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js';
+
+        // 显示正在检查的状态
+        updateBtn.textContent = '⌛'; // 沙漏图标
+        updateBtn.title = '正在检查更新...';
+
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: updateURL,
+            onload: function(response) {
+                if (response.status === 200) {
+                    // 提取远程脚本的版本号
+                    const versionMatch = response.responseText.match(/@version\s+([\d\.]+)/);
+                    if (versionMatch && versionMatch[1]) {
+                        const remoteVersion = versionMatch[1];
+
+                        // 比较版本
+                        if (remoteVersion > scriptVersion) {
+                            // 有新版本
+                            updateBtn.textContent = '✔'; // 勾选图标
+                            updateBtn.title = `发现新版本 v${remoteVersion}，点击前往更新页面`;
+                            updateBtn.style.color = '#68d391'; // 绿色
+
+                            // 点击按钮跳转到更新页面
+                            updateBtn.onclick = function() {
+                                window.open(updateURL, '_blank');
+                            };
+                        } else {
+                            // 已是最新版本
+                            updateBtn.textContent = '✔'; // 勾选图标
+                            updateBtn.title = '已是最新版本';
+                            updateBtn.style.color = '#68d391'; // 绿色
+
+                            // 3秒后恢复原样式
+                            setTimeout(() => {
+                                updateBtn.textContent = '🔎'; // 放大镜图标
+                                updateBtn.title = '检查更新';
+                                updateBtn.style.color = 'white';
+                                updateBtn.onclick = checkForUpdates;
+                            }, 3000);
+                        }
+                    } else {
+                        handleUpdateError();
+                    }
+                } else {
+                    handleUpdateError();
+                }
+            },
+            onerror: handleUpdateError
+        });
+
+        // 处理更新检查错误
+        function handleUpdateError() {
+            updateBtn.textContent = '❌'; // 错误图标
+            updateBtn.title = '检查更新失败，请稍后再试';
+            updateBtn.style.color = '#fc8181'; // 红色
+
+            // 3秒后恢复原样式
+            setTimeout(() => {
+                updateBtn.textContent = '🔎'; // 放大镜图标
+                updateBtn.title = '检查更新';
+                updateBtn.style.color = 'white';
+            }, 3000);
+        }
+    }
 
     // 获取信任级别数据
     function fetchTrustLevelData() {
