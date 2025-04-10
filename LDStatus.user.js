@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
 // @connect      connect.linux.do
 // @updateURL    https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js
 // @downloadURL  https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js
@@ -174,6 +176,10 @@
     `;
     document.head.appendChild(style);
 
+    // 定义存储键
+    const STORAGE_KEY_POSITION = 'ld_panel_position';
+    const STORAGE_KEY_COLLAPSED = 'ld_panel_collapsed';
+
     // 创建面板
     const panel = document.createElement('div');
     panel.id = 'ld-trust-level-panel';
@@ -198,6 +204,39 @@
     panel.appendChild(header);
     panel.appendChild(content);
     document.body.appendChild(panel);
+
+    // 保存窗口位置的函数
+    function savePanelPosition() {
+        const transform = window.getComputedStyle(panel).transform;
+        if (transform && transform !== 'none') {
+            const matrix = new DOMMatrix(transform);
+            GM_setValue(STORAGE_KEY_POSITION, { x: matrix.e, y: matrix.f });
+        }
+    }
+
+    // 保存窗口折叠状态的函数
+    function savePanelCollapsedState() {
+        GM_setValue(STORAGE_KEY_COLLAPSED, panel.classList.contains('ld-collapsed'));
+    }
+
+    // 恢复窗口状态
+    function restorePanelState() {
+        // 恢复折叠状态
+        const isCollapsed = GM_getValue(STORAGE_KEY_COLLAPSED, false);
+        if (isCollapsed) {
+            panel.classList.add('ld-collapsed');
+            toggleBtn.textContent = '▶'; // 右箭头
+        } else {
+            panel.classList.remove('ld-collapsed');
+            toggleBtn.textContent = '◀'; // 左箭头
+        }
+
+        // 恢复位置
+        const position = GM_getValue(STORAGE_KEY_POSITION, null);
+        if (position) {
+            panel.style.transform = `translate(${position.x}px, ${position.y}px)`;
+        }
+    }
 
     // 拖动功能
     let isDragging = false;
@@ -240,6 +279,9 @@
         isDragging = false;
         panel.style.transition = '';
         document.body.style.userSelect = '';
+
+        // 保存窗口位置
+        savePanelPosition();
     });
 
     // 展开/收起功能
@@ -247,6 +289,9 @@
     toggleBtn.addEventListener('click', () => {
         panel.classList.toggle('ld-collapsed');
         toggleBtn.textContent = panel.classList.contains('ld-collapsed') ? '▶' : '◀';
+
+        // 保存折叠状态
+        savePanelCollapsedState();
     });
 
     // 刷新按钮
@@ -524,6 +569,10 @@
 
     // 初始加载
     fetchTrustLevelData();
+
+    // 恢复窗口状态
+    // 在所有DOM操作完成后执行，确保 toggleBtn 已经定义
+    setTimeout(restorePanelState, 100);
 
     // 定时刷新（每两分钟）
     setInterval(fetchTrustLevelData, 120000);
