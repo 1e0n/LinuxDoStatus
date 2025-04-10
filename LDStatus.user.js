@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
