@@ -58,40 +58,51 @@
             color: #a0aec0;
         }
 
-        /* 亮色主题 */
+        /* 亮色主题 - 提高对比度 */
         #ld-trust-level-panel.ld-light-theme {
-            background-color: #f7fafc;
-            color: #2d3748;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            background-color: #ffffff;
+            color: #1a202c;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+            border: 1px solid #e2e8f0;
         }
 
         #ld-trust-level-panel.ld-light-theme #ld-trust-level-header {
-            background-color: #edf2f7;
-            color: #2d3748;
+            background-color: #3182ce; /* 更深的蓝色 */
+            color: #ffffff;
+            border-bottom: 1px solid #2c5282; /* 添加底部边框 */
         }
 
         #ld-trust-level-panel.ld-light-theme .ld-trust-level-item.ld-success .ld-value {
-            color: #38a169;
+            color: #276749; /* 更深的绿色 */
+            font-weight: bold;
         }
 
         #ld-trust-level-panel.ld-light-theme .ld-trust-level-item.ld-fail .ld-value {
-            color: #e53e3e;
+            color: #c53030;
+            font-weight: bold;
+        }
+
+        /* 亮色主题下的文本颜色 */
+        #ld-trust-level-panel.ld-light-theme .ld-name {
+            color: #2d3748; /* 深灰色 */
         }
 
         #ld-trust-level-panel.ld-light-theme .ld-loading {
-            color: #718096;
+            color: #4a5568;
         }
 
         #ld-trust-level-panel.ld-light-theme .ld-daily-stats-title {
-            color: #718096;
+            color: #4a5568;
+            font-weight: bold;
         }
 
         #ld-trust-level-panel.ld-light-theme .ld-daily-stats-item .ld-value {
-            color: #38a169;
+            color: #2c7a4b;
+            font-weight: bold;
         }
 
         #ld-trust-level-panel.ld-light-theme .ld-version {
-            color: #718096;
+            color: #e2e8f0;
         }
 
         /* 共用样式 */
@@ -230,19 +241,42 @@
             padding: 10px;
         }
 
-        .ld-increase {
+        /* 深色主题下的变化指示器 */
+        .ld-dark-theme .ld-increase {
             color: #ffd700; /* 黄色 */
         }
 
-        .ld-decrease {
+        .ld-dark-theme .ld-decrease {
             color: #4299e1; /* 蓝色 */
         }
 
+        /* 亮色主题下的变化指示器 */
+        .ld-light-theme .ld-increase {
+            color: #d69e2e; /* 深黄色 */
+            font-weight: bold;
+        }
+
+        .ld-light-theme .ld-decrease {
+            color: #2b6cb0; /* 深蓝色 */
+            font-weight: bold;
+        }
+
+        /* 所有主题下的活动数据区域 */
         .ld-daily-stats {
-            margin-top: 15px;
-            padding-top: 10px;
-            border-top: 1px solid #4a5568;
+            margin-top: 10px;
             font-size: 11px;
+        }
+
+        /* 深色主题下的分隔线 */
+        .ld-dark-theme .ld-daily-stats {
+            border-top: 1px solid #4a5568;
+            padding-top: 10px;
+        }
+
+        /* 亮色主题下的分隔线 */
+        .ld-light-theme .ld-daily-stats {
+            border-top: 1px solid #cbd5e0;
+            padding-top: 10px;
         }
 
         .ld-daily-stats-title {
@@ -435,11 +469,13 @@
         // 在亮色主题下调整按钮颜色
         if (!isDarkTheme) {
             document.querySelectorAll('.ld-toggle-btn, .ld-refresh-btn, .ld-update-btn, .ld-theme-btn').forEach(btn => {
-                btn.style.color = '#2d3748';
+                btn.style.color = 'white'; // 亮色主题下按钮使用白色，因为标题栏是蓝色
+                btn.style.textShadow = '0 0 1px rgba(0,0,0,0.3)'; // 添加文字阴影增强可读性
             });
         } else {
             document.querySelectorAll('.ld-toggle-btn, .ld-refresh-btn, .ld-update-btn, .ld-theme-btn').forEach(btn => {
                 btn.style.color = 'white';
+                btn.style.textShadow = 'none';
             });
         }
     }
