@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
@@ -22,25 +22,93 @@
     // 创建样式 - 使用更特定的选择器以避免影响帖子界面的按钮
     const style = document.createElement('style');
     style.textContent = `
+        /* 深色主题 */
+        #ld-trust-level-panel.ld-dark-theme {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+        }
+
+        #ld-trust-level-panel.ld-dark-theme #ld-trust-level-header {
+            background-color: #1a202c;
+            color: white;
+        }
+
+        #ld-trust-level-panel.ld-dark-theme .ld-trust-level-item.ld-success .ld-value {
+            color: #68d391;
+        }
+
+        #ld-trust-level-panel.ld-dark-theme .ld-trust-level-item.ld-fail .ld-value {
+            color: #fc8181;
+        }
+
+        #ld-trust-level-panel.ld-dark-theme .ld-loading {
+            color: #a0aec0;
+        }
+
+        #ld-trust-level-panel.ld-dark-theme .ld-daily-stats-title {
+            color: #a0aec0;
+        }
+
+        #ld-trust-level-panel.ld-dark-theme .ld-daily-stats-item .ld-value {
+            color: #68d391;
+        }
+
+        #ld-trust-level-panel.ld-dark-theme .ld-version {
+            color: #a0aec0;
+        }
+
+        /* 亮色主题 */
+        #ld-trust-level-panel.ld-light-theme {
+            background-color: #f7fafc;
+            color: #2d3748;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #ld-trust-level-panel.ld-light-theme #ld-trust-level-header {
+            background-color: #edf2f7;
+            color: #2d3748;
+        }
+
+        #ld-trust-level-panel.ld-light-theme .ld-trust-level-item.ld-success .ld-value {
+            color: #38a169;
+        }
+
+        #ld-trust-level-panel.ld-light-theme .ld-trust-level-item.ld-fail .ld-value {
+            color: #e53e3e;
+        }
+
+        #ld-trust-level-panel.ld-light-theme .ld-loading {
+            color: #718096;
+        }
+
+        #ld-trust-level-panel.ld-light-theme .ld-daily-stats-title {
+            color: #718096;
+        }
+
+        #ld-trust-level-panel.ld-light-theme .ld-daily-stats-item .ld-value {
+            color: #38a169;
+        }
+
+        #ld-trust-level-panel.ld-light-theme .ld-version {
+            color: #718096;
+        }
+
+        /* 共用样式 */
         #ld-trust-level-panel {
             position: fixed;
             left: 10px;
             top: 100px;
             width: 210px;
-            background-color: #2d3748;
             border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
             z-index: 9999;
             font-family: Arial, sans-serif;
             transition: all 0.3s ease;
             overflow: hidden;
-            color: #e2e8f0;
             font-size: 12px;
         }
 
         #ld-trust-level-header {
-            background-color: #1a202c;
-            color: white;
             padding: 8px 10px;
             cursor: move;
             display: flex;
@@ -90,15 +158,9 @@
             min-width: 70px;
         }
 
-        .ld-trust-level-item.ld-success .ld-value {
-            color: #68d391;
-        }
+        /* 这些样式已移动到主题特定样式中 */
 
-        .ld-trust-level-item.ld-fail .ld-value {
-            color: #fc8181;
-        }
-
-        .ld-toggle-btn, .ld-refresh-btn, .ld-update-btn {
+        .ld-toggle-btn, .ld-refresh-btn, .ld-update-btn, .ld-theme-btn {
             background: none;
             border: none;
             color: white;
@@ -148,6 +210,7 @@
         .ld-collapsed .ld-header-content > span,
         .ld-collapsed .ld-refresh-btn,
         .ld-collapsed .ld-update-btn,
+        .ld-collapsed .ld-theme-btn,
         .ld-collapsed .ld-version {
             display: none !important;
         }
@@ -165,7 +228,6 @@
         .ld-loading {
             text-align: center;
             padding: 10px;
-            color: #a0aec0;
         }
 
         .ld-increase {
@@ -186,7 +248,6 @@
         .ld-daily-stats-title {
             font-weight: bold;
             margin-bottom: 5px;
-            color: #a0aec0;
         }
 
         .ld-daily-stats-item {
@@ -202,7 +263,6 @@
         .ld-daily-stats-item .ld-value {
             flex: 0 0 auto;
             font-weight: bold;
-            color: #68d391;
         }
     `;
     document.head.appendChild(style);
@@ -210,10 +270,15 @@
     // 定义存储键
     const STORAGE_KEY_POSITION = 'ld_panel_position';
     const STORAGE_KEY_COLLAPSED = 'ld_panel_collapsed';
+    const STORAGE_KEY_THEME = 'ld_panel_theme';
 
     // 创建面板
     const panel = document.createElement('div');
     panel.id = 'ld-trust-level-panel';
+
+    // 设置默认主题
+    const currentTheme = GM_getValue(STORAGE_KEY_THEME, 'dark');
+    panel.classList.add(currentTheme === 'dark' ? 'ld-dark-theme' : 'ld-light-theme');
 
     // 获取脚本版本号
     const scriptVersion = GM_info.script.version;
@@ -227,6 +292,7 @@
             <span class="ld-version">v${scriptVersion}</span>
             <button class="ld-update-btn" title="检查更新">🔎</button>
             <button class="ld-refresh-btn" title="刷新数据">🔄</button>
+            <button class="ld-theme-btn" title="切换主题">🌙</button>
             <button class="ld-toggle-btn" title="展开/收起">◀</button>
         </div>
     `;
@@ -337,6 +403,46 @@
     // 检查更新按钮
     const updateBtn = header.querySelector('.ld-update-btn');
     updateBtn.addEventListener('click', checkForUpdates);
+
+    // 主题切换按钮
+    const themeBtn = header.querySelector('.ld-theme-btn');
+    themeBtn.addEventListener('click', toggleTheme);
+
+    // 更新主题按钮图标
+    updateThemeButtonIcon();
+
+    // 切换主题函数
+    function toggleTheme() {
+        const isDarkTheme = panel.classList.contains('ld-dark-theme');
+
+        // 切换主题类
+        panel.classList.remove(isDarkTheme ? 'ld-dark-theme' : 'ld-light-theme');
+        panel.classList.add(isDarkTheme ? 'ld-light-theme' : 'ld-dark-theme');
+
+        // 保存主题设置
+        GM_setValue(STORAGE_KEY_THEME, isDarkTheme ? 'light' : 'dark');
+
+        // 更新主题按钮图标
+        updateThemeButtonIcon();
+    }
+
+    // 更新主题按钮图标
+    function updateThemeButtonIcon() {
+        const isDarkTheme = panel.classList.contains('ld-dark-theme');
+        themeBtn.textContent = isDarkTheme ? '🌙' : '☀️'; // 月亮或太阳图标
+        themeBtn.title = isDarkTheme ? '切换为亮色主题' : '切换为深色主题';
+
+        // 在亮色主题下调整按钮颜色
+        if (!isDarkTheme) {
+            document.querySelectorAll('.ld-toggle-btn, .ld-refresh-btn, .ld-update-btn, .ld-theme-btn').forEach(btn => {
+                btn.style.color = '#2d3748';
+            });
+        } else {
+            document.querySelectorAll('.ld-toggle-btn, .ld-refresh-btn, .ld-update-btn, .ld-theme-btn').forEach(btn => {
+                btn.style.color = 'white';
+            });
+        }
+    }
 
     // 检查脚本更新
     function checkForUpdates() {
@@ -575,11 +681,15 @@
             { name: '回复话题', key: '回复的话题' },
             { name: '已读帖子', key: '已读帖子（所有时间）' },
             { name: '获得点赞', key: '获赞：点赞用户数量' },
-            { name: '点赞帖子', key: '点赞的帖子' }
+            { name: '点赞帖子', key: '点赞' }
         ];
+
+        console.log('dailyStatsItems:', dailyStatsItems);
+        console.log('dailyChanges:', dailyChanges);
 
         dailyStatsItems.forEach(item => {
             const value = dailyChanges[item.key] || 0;
+            console.log('数据项：', item.name, '键：', item.key, '值：', value);
             html += `
                 <div class="ld-daily-stats-item">
                     <span class="ld-name">${item.name}</span>
@@ -604,8 +714,12 @@
             '回复的话题', // 回复话题数
             '已读帖子（所有时间）', // 已读帖子总数
             '获赞：点赞用户数量', // 获赞数
-            '点赞的帖子' // 点赞数
+            '点赞' // 点赞数
         ];
+
+        // 调试信息：输出所有数据项的名称
+        console.log('数据项名称：', requirements.map(r => r.name));
+        console.log('要跟踪的数据项：', statsToTrack);
 
         // 获取当前时间
         const now = new Date().getTime();
@@ -620,15 +734,24 @@
         // 对于每个要跟踪的数据项，找到当前值并添加到历史记录中
         statsToTrack.forEach(statName => {
             const req = requirements.find(r => r.name === statName);
+            console.log('在requirements中查找数据项：', statName, req ? '找到了' : '未找到');
             if (req) {
+                // 提取数字值
+                const currentMatch = req.current.match(/(\d+)/);
+                const currentValue = currentMatch ? parseInt(currentMatch[1], 10) : 0;
+                console.log('数据项值：', statName, req.current, currentValue);
+
                 // 添加新的数据点
                 dailyStats.push({
                     name: statName,
-                    value: req.currentValue,
+                    value: currentValue,
                     timestamp: now
                 });
             }
         });
+
+        // 调试信息：输出保存的数据
+        console.log('保存的dailyStats数据：', dailyStats);
 
         // 将更新后的数据保存回 localStorage
         localStorage.setItem('ld_daily_stats', JSON.stringify(dailyStats));
@@ -644,7 +767,7 @@
             '回复的话题', // 回复话题数
             '已读帖子（所有时间）', // 已读帖子总数
             '获赞：点赞用户数量', // 获赞数
-            '点赞的帖子' // 点赞数
+            '点赞' // 点赞数
         ];
 
         const result = {};
@@ -672,15 +795,19 @@
             }
         });
 
+        console.log('dailyChanges result:', result);
         return result;
     }
 
     // 初始加载
     fetchTrustLevelData();
 
-    // 恢复窗口状态
-    // 在所有DOM操作完成后执行，确保 toggleBtn 已经定义
-    setTimeout(restorePanelState, 100);
+    // 恢复窗口状态和主题
+    // 在所有DOM操作完成后执行，确保 toggleBtn 和 themeBtn 已经定义
+    setTimeout(() => {
+        restorePanelState();
+        updateThemeButtonIcon();
+    }, 100);
 
     // 定时刷新（每两分钟）
     setInterval(fetchTrustLevelData, 120000);
