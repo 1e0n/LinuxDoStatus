@@ -10,8 +10,10 @@
 // @grant        GM_getValue
 // @grant        GM_info
 // @connect      connect.linux.do
-// @updateURL    https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js
-// @downloadURL  https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js
+// @connect      github.com
+// @connect      raw.githubusercontent.com
+// @updateURL    https://raw.githubusercontent.com/1e0n/LinuxDoStatus/master/LDStatus.user.js
+// @downloadURL  https://raw.githubusercontent.com/1e0n/LinuxDoStatus/master/LDStatus.user.js
 // ==/UserScript==
 
 (function() {
@@ -45,6 +47,19 @@
             justify-content: space-between;
             align-items: center;
             user-select: none;
+        }
+
+        .ld-header-content {
+            display: flex;
+            width: 100%;
+            align-items: center;
+            justify-content: space-between;
+            white-space: nowrap;
+        }
+
+        .ld-header-content > span:first-child {
+            margin-right: auto;
+            font-weight: bold;
         }
 
         #ld-trust-level-content {
@@ -96,6 +111,7 @@
             font-size: 10px;
             color: #a0aec0;
             margin-left: 5px;
+            font-weight: normal;
         }
 
         .ld-collapsed {
@@ -119,11 +135,17 @@
             align-items: center;
         }
 
+        .ld-collapsed #ld-trust-level-header > div {
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+        }
+
         .ld-collapsed #ld-trust-level-content {
             display: none !important;
         }
 
-        .ld-collapsed #ld-trust-level-header div:first-child,
+        .ld-collapsed .ld-header-content > span,
         .ld-collapsed .ld-refresh-btn,
         .ld-collapsed .ld-update-btn,
         .ld-collapsed .ld-version {
@@ -200,8 +222,9 @@
     const header = document.createElement('div');
     header.id = 'ld-trust-level-header';
     header.innerHTML = `
-        <div>信任级别进度<span class="ld-version">v${scriptVersion}</span></div>
-        <div>
+        <div class="ld-header-content">
+            <span>Status</span>
+            <span class="ld-version">v${scriptVersion}</span>
             <button class="ld-update-btn" title="检查更新">🔎</button>
             <button class="ld-refresh-btn" title="刷新数据">🔄</button>
             <button class="ld-toggle-btn" title="展开/收起">◀</button>
@@ -317,7 +340,7 @@
 
     // 检查脚本更新
     function checkForUpdates() {
-        const updateURL = 'https://github.com/1e0n/LinuxDoStatus/raw/master/LDStatus.user.js';
+        const updateURL = 'https://raw.githubusercontent.com/1e0n/LinuxDoStatus/master/LDStatus.user.js';
 
         // 显示正在检查的状态
         updateBtn.textContent = '⌛'; // 沙漏图标
@@ -336,9 +359,9 @@
                         // 比较版本
                         if (remoteVersion > scriptVersion) {
                             // 有新版本
-                            updateBtn.textContent = '✔'; // 勾选图标
+                            updateBtn.textContent = '⚠️'; // 警告图标
                             updateBtn.title = `发现新版本 v${remoteVersion}，点击前往更新页面`;
-                            updateBtn.style.color = '#68d391'; // 绿色
+                            updateBtn.style.color = '#ffd700'; // 黄色
 
                             // 点击按钮跳转到更新页面
                             updateBtn.onclick = function() {
