@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
@@ -210,6 +210,7 @@
     // 定义存储键
     const STORAGE_KEY_POSITION = 'ld_panel_position';
     const STORAGE_KEY_COLLAPSED = 'ld_panel_collapsed';
+    const STORAGE_KEY_LAST_UPDATE_CHECK = 'ld_last_update_check';
 
     // 创建面板
     const panel = document.createElement('div');
@@ -221,25 +222,72 @@
     // 创建面板头部
     const header = document.createElement('div');
     header.id = 'ld-trust-level-header';
-    header.innerHTML = `
-        <div class="ld-header-content">
-            <span>Status</span>
-            <span class="ld-version">v${scriptVersion}</span>
-            <button class="ld-update-btn" title="检查更新">🔎</button>
-            <button class="ld-refresh-btn" title="刷新数据">🔄</button>
-            <button class="ld-toggle-btn" title="展开/收起">◀</button>
-        </div>
-    `;
+    
+    const headerContent = document.createElement('div');
+    headerContent.className = 'ld-header-content';
+    
+    const statusSpan = document.createElement('span');
+    statusSpan.textContent = 'Status';
+    headerContent.appendChild(statusSpan);
+    
+    const versionSpan = document.createElement('span');
+    versionSpan.className = 'ld-version';
+    versionSpan.textContent = `v${scriptVersion}`;
+    headerContent.appendChild(versionSpan);
+    
+    const updateBtn = document.createElement('button');
+    updateBtn.className = 'ld-update-btn';
+    updateBtn.title = '检查更新';
+    updateBtn.textContent = '🔎';
+    headerContent.appendChild(updateBtn);
+    
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'ld-refresh-btn';
+    refreshBtn.title = '刷新数据';
+    refreshBtn.textContent = '🔄';
+    headerContent.appendChild(refreshBtn);
+    
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'ld-toggle-btn';
+    toggleBtn.title = '展开/收起';
+    toggleBtn.textContent = '◀';
+    headerContent.appendChild(toggleBtn);
+    
+    header.appendChild(headerContent);
 
     // 创建内容区域
     const content = document.createElement('div');
     content.id = 'ld-trust-level-content';
-    content.innerHTML = '<div class="ld-loading">加载中...</div>';
-
+    
     // 组装面板
     panel.appendChild(header);
     panel.appendChild(content);
     document.body.appendChild(panel);
+
+    // 显示加载信息的函数
+    function showLoading() {
+        clearContent();
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'ld-loading';
+        loadingDiv.textContent = '加载中...';
+        content.appendChild(loadingDiv);
+    }
+
+    // 显示错误信息的函数
+    function showErrorMessage(message) {
+        clearContent();
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'ld-loading';
+        errorDiv.textContent = message;
+        content.appendChild(errorDiv);
+    }
+
+    // 清空内容区域的函数
+    function clearContent() {
+        while (content.firstChild) {
+            content.removeChild(content.firstChild);
+        }
+    }
 
     // 保存窗口位置的函数
     function savePanelPosition() {
@@ -274,6 +322,20 @@
         }
     }
 
+    // 实现节流函数
+    function throttle(func, limit) {
+        let inThrottle;
+        return function() {
+            const args = arguments;
+            const context = this;
+            if (!inThrottle) {
+                func.apply(context, args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, limit);
+            }
+        };
+    }
+
     // 拖动功能
     let isDragging = false;
     let lastX, lastY;
@@ -290,24 +352,22 @@
         document.body.style.userSelect = 'none';
     });
 
-    document.addEventListener('mousemove', (e) => {
+    document.addEventListener('mousemove', throttle((e) => {
         if (!isDragging) return;
 
-        // 使用 transform 而不是改变 left/top 属性，性能更好
         const dx = e.clientX - lastX;
         const dy = e.clientY - lastY;
-
-        const currentTransform = window.getComputedStyle(panel).transform;
-        const matrix = new DOMMatrix(currentTransform === 'none' ? '' : currentTransform);
-
-        const newX = matrix.e + dx;
-        const newY = matrix.f + dy;
-
-        panel.style.transform = `translate(${newX}px, ${newY}px)`;
-
         lastX = e.clientX;
         lastY = e.clientY;
-    });
+
+        requestAnimationFrame(() => {
+            const currentTransform = window.getComputedStyle(panel).transform;
+            const matrix = new DOMMatrix(currentTransform === 'none' ? '' : currentTransform);
+            const newX = matrix.e + dx;
+            const newY = matrix.f + dy;
+            panel.style.transform = `translate(${newX}px, ${newY}px)`;
+        });
+    }, 16));
 
     document.addEventListener('mouseup', () => {
         if (!isDragging) return;
@@ -321,7 +381,6 @@
     });
 
     // 展开/收起功能
-    const toggleBtn = header.querySelector('.ld-toggle-btn');
     toggleBtn.addEventListener('click', () => {
         panel.classList.toggle('ld-collapsed');
         toggleBtn.textContent = panel.classList.contains('ld-collapsed') ? '▶' : '◀';
@@ -331,15 +390,27 @@
     });
 
     // 刷新按钮
-    const refreshBtn = header.querySelector('.ld-refresh-btn');
     refreshBtn.addEventListener('click', fetchTrustLevelData);
 
     // 检查更新按钮
-    const updateBtn = header.querySelector('.ld-update-btn');
     updateBtn.addEventListener('click', checkForUpdates);
 
     // 检查脚本更新
     function checkForUpdates() {
+        const lastCheck = GM_getValue(STORAGE_KEY_LAST_UPDATE_CHECK, 0);
+        const now = Date.now();
+        
+        // 一天只检查一次
+        if (now - lastCheck < 86400000) {
+            updateBtn.textContent = '⏱️';
+            updateBtn.title = '今天已检查过更新';
+            setTimeout(() => {
+                updateBtn.textContent = '🔎';
+                updateBtn.title = '检查更新';
+            }, 2000);
+            return;
+        }
+        
         const updateURL = 'https://raw.githubusercontent.com/1e0n/LinuxDoStatus/master/LDStatus.user.js';
 
         // 显示正在检查的状态
@@ -349,50 +420,64 @@
         GM_xmlhttpRequest({
             method: 'GET',
             url: updateURL,
+            timeout: 10000, // 添加超时设置
             onload: function(response) {
                 if (response.status === 200) {
-                    // 提取远程脚本的版本号
-                    const versionMatch = response.responseText.match(/@version\s+([\d\.]+)/);
-                    if (versionMatch && versionMatch[1]) {
-                        const remoteVersion = versionMatch[1];
+                    try {
+                        // 提取远程脚本的版本号
+                        const versionMatch = response.responseText.match(/@version\s+([\d\.]+)/);
+                        if (versionMatch && versionMatch[1]) {
+                            const remoteVersion = versionMatch[1];
 
-                        // 比较版本
-                        if (remoteVersion > scriptVersion) {
-                            // 有新版本
-                            updateBtn.textContent = '⚠️'; // 警告图标
-                            updateBtn.title = `发现新版本 v${remoteVersion}，点击前往更新页面`;
-                            updateBtn.style.color = '#ffd700'; // 黄色
+                            // 比较版本
+                            if (remoteVersion > scriptVersion) {
+                                // 有新版本
+                                updateBtn.textContent = '⚠️'; // 警告图标
+                                updateBtn.title = `发现新版本 v${remoteVersion}，点击前往更新页面`;
+                                updateBtn.style.color = '#ffd700'; // 黄色
 
-                            // 点击按钮跳转到更新页面
-                            updateBtn.onclick = function() {
-                                window.open(updateURL, '_blank');
-                            };
+                                // 点击按钮跳转到更新页面
+                                updateBtn.onclick = function() {
+                                    window.open(updateURL, '_blank');
+                                };
+                            } else {
+                                // 已是最新版本
+                                updateBtn.textContent = '✔'; // 勾选图标
+                                updateBtn.title = '已是最新版本';
+                                updateBtn.style.color = '#68d391'; // 绿色
+
+                                // 3秒后恢复原样式
+                                setTimeout(() => {
+                                    updateBtn.textContent = '🔎'; // 放大镜图标
+                                    updateBtn.title = '检查更新';
+                                    updateBtn.style.color = 'white';
+                                    updateBtn.onclick = checkForUpdates;
+                                }, 3000);
+                            }
                         } else {
-                            // 已是最新版本
-                            updateBtn.textContent = '✔'; // 勾选图标
-                            updateBtn.title = '已是最新版本';
-                            updateBtn.style.color = '#68d391'; // 绿色
-
-                            // 3秒后恢复原样式
-                            setTimeout(() => {
-                                updateBtn.textContent = '🔎'; // 放大镜图标
-                                updateBtn.title = '检查更新';
-                                updateBtn.style.color = 'white';
-                                updateBtn.onclick = checkForUpdates;
-                            }, 3000);
+                            handleUpdateError('无法解析版本信息');
                         }
-                    } else {
-                        handleUpdateError();
+                    } catch (error) {
+                        handleUpdateError('处理更新信息时出错: ' + error.message);
                     }
                 } else {
-                    handleUpdateError();
+                    handleUpdateError(`请求失败 (${response.status})`);
                 }
+                
+                // 更新检查时间
+                GM_setValue(STORAGE_KEY_LAST_UPDATE_CHECK, now);
             },
-            onerror: handleUpdateError
+            onerror: function(error) {
+                handleUpdateError('网络请求失败');
+            },
+            ontimeout: function() {
+                handleUpdateError('请求超时');
+            }
         });
 
         // 处理更新检查错误
-        function handleUpdateError() {
+        function handleUpdateError(message) {
+            console.error('检查更新失败:', message);
             updateBtn.textContent = '❌'; // 错误图标
             updateBtn.title = '检查更新失败，请稍后再试';
             updateBtn.style.color = '#fc8181'; // 红色
@@ -408,48 +493,60 @@
 
     // 获取信任级别数据
     function fetchTrustLevelData() {
-        content.innerHTML = '<div class="ld-loading">加载中...</div>';
+        showLoading();
 
         GM_xmlhttpRequest({
             method: 'GET',
             url: 'https://connect.linux.do',
+            timeout: 10000, // 添加超时设置
             onload: function(response) {
                 if (response.status === 200) {
-                    parseTrustLevelData(response.responseText);
+                    try {
+                        parseTrustLevelData(response.responseText);
+                    } catch (error) {
+                        console.error('解析数据时出错:', error);
+                        showErrorMessage('解析数据时出错: ' + error.message);
+                    }
                 } else {
-                    content.innerHTML = '<div class="ld-loading">获取数据失败，请稍后再试</div>';
+                    showErrorMessage(`获取数据失败 (${response.status})`);
                 }
             },
-            onerror: function() {
-                content.innerHTML = '<div class="ld-loading">获取数据失败，请稍后再试</div>';
+            onerror: function(error) {
+                console.error('请求错误:', error);
+                showErrorMessage('网络请求失败');
+            },
+            ontimeout: function() {
+                showErrorMessage('请求超时');
             }
         });
     }
 
-    // 解析信任级别数据
-    function parseTrustLevelData(html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
+    // 查找信任级别区块
+    function findTrustLevelSection(doc) {
+        const headers = doc.querySelectorAll('h2');
+        const trustHeader = Array.from(headers).find(h => h.textContent.includes('信任级别'));
+        return trustHeader ? trustHeader.closest('.bg-white.p-6.rounded-lg') : null;
+    }
 
-        // 查找信任级别区块
-        const trustLevelSection = Array.from(doc.querySelectorAll('.bg-white.p-6.rounded-lg')).find(div => {
-            const heading = div.querySelector('h2');
-            return heading && heading.textContent.includes('信任级别');
-        });
-
-        if (!trustLevelSection) {
-            content.innerHTML = '<div class="ld-loading">未找到信任级别数据，请确保已登录</div>';
-            return;
-        }
-
-        // 获取用户名和当前级别
-        const heading = trustLevelSection.querySelector('h2').textContent.trim();
+    // 提取用户信息
+    function extractUserInfo(section) {
+        const heading = section.querySelector('h2').textContent.trim();
         const match = heading.match(/(.*) - 信任级别 (\d+) 的要求/);
-        const username = match ? match[1] : '未知用户';
-        const targetLevel = match ? match[2] : '未知';
+        return {
+            username: match ? match[1] : '未知用户',
+            targetLevel: match ? match[2] : '未知'
+        };
+    }
 
-        // 获取表格数据
-        const tableRows = trustLevelSection.querySelectorAll('table tr');
+    // 检查需求状态
+    function checkRequirementStatus(section) {
+        const resultText = section.querySelector('p.text-red-500, p.text-green-500');
+        return resultText ? !resultText.classList.contains('text-red-500') : false;
+    }
+
+    // 提取需求数据
+    function extractRequirements(section, previousRequirements) {
+        const tableRows = section.querySelectorAll('table tr');
         const requirements = [];
 
         for (let i = 1; i < tableRows.length; i++) { // 跳过表头
@@ -497,9 +594,30 @@
             }
         }
 
+        return requirements;
+    }
+
+    // 解析信任级别数据
+    function parseTrustLevelData(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // 查找信任级别区块
+        const trustLevelSection = findTrustLevelSection(doc);
+
+        if (!trustLevelSection) {
+            showErrorMessage('未找到信任级别数据，请确保已登录');
+            return;
+        }
+
+        // 获取用户名和当前级别
+        const { username, targetLevel } = extractUserInfo(trustLevelSection);
+
+        // 获取表格数据
+        const requirements = extractRequirements(trustLevelSection, previousRequirements);
+
         // 获取总体结果
-        const resultText = trustLevelSection.querySelector('p.text-red-500, p.text-green-500');
-        const isMeetingRequirements = resultText ? !resultText.classList.contains('text-red-500') : false;
+        const isMeetingRequirements = checkRequirementStatus(trustLevelSection);
 
         // 存储24小时内的数据变化
         const dailyChanges = saveDailyStats(requirements);
@@ -513,15 +631,26 @@
 
     // 渲染信任级别数据
     function renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements, dailyChanges = {}) {
-        let html = `
-            <div style="margin-bottom: 8px; font-weight: bold;">
-                ${username} - 信任级别 ${targetLevel}
-            </div>
-            <div style="margin-bottom: 10px; ${isMeetingRequirements ? 'color: #68d391' : 'color: #fc8181'}; font-size: 11px;">
-                ${isMeetingRequirements ? '已' : '未'}符合信任级别 ${targetLevel} 要求
-            </div>
-        `;
-
+        clearContent();
+        
+        const fragment = document.createDocumentFragment();
+        
+        // 创建用户和级别信息
+        const headerDiv = document.createElement('div');
+        headerDiv.style.marginBottom = '8px';
+        headerDiv.style.fontWeight = 'bold';
+        headerDiv.textContent = `${username} - 信任级别 ${targetLevel}`;
+        fragment.appendChild(headerDiv);
+        
+        // 创建需求状态信息
+        const statusDiv = document.createElement('div');
+        statusDiv.style.marginBottom = '10px';
+        statusDiv.style.color = isMeetingRequirements ? '#68d391' : '#fc8181';
+        statusDiv.style.fontSize = '11px';
+        statusDiv.textContent = `${isMeetingRequirements ? '已' : '未'}符合信任级别 ${targetLevel} 要求`;
+        fragment.appendChild(statusDiv);
+        
+        // 创建需求列表
         requirements.forEach(req => {
             // 简化项目名称
             let name = req.name;
@@ -543,32 +672,49 @@
 
             if (currentMatch) current = currentMatch[1];
             if (requiredMatch) required = requiredMatch[1];
-
-            // 添加目标完成数变化的标识
-            let changeIndicator = '';
+            
+            // 创建需求项
+            const reqDiv = document.createElement('div');
+            reqDiv.className = `ld-trust-level-item ${req.isSuccess ? 'ld-success' : 'ld-fail'}`;
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'ld-name';
+            nameSpan.textContent = name;
+            reqDiv.appendChild(nameSpan);
+            
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'ld-value';
+            
+            // 添加目标完成数
+            valueSpan.textContent = `${current} / ${required}`;
+            
+            // 添加变化指示器
             if (req.hasChanged) {
+                const changeIndicator = document.createElement('span');
                 const diff = req.changeValue;
                 if (diff > 0) {
-                    changeIndicator = `<span class="ld-increase"> ▲${diff}</span>`; // 增加标识，黄色
+                    changeIndicator.className = 'ld-increase';
+                    changeIndicator.textContent = ` ▲${diff}`;
                 } else if (diff < 0) {
-                    changeIndicator = `<span class="ld-decrease"> ▼${Math.abs(diff)}</span>`; // 减少标识，蓝色
+                    changeIndicator.className = 'ld-decrease';
+                    changeIndicator.textContent = ` ▼${Math.abs(diff)}`;
                 }
+                valueSpan.appendChild(changeIndicator);
             }
-
-            html += `
-                <div class="ld-trust-level-item ${req.isSuccess ? 'ld-success' : 'ld-fail'}">
-                    <span class="ld-name">${name}</span>
-                    <span class="ld-value">${current}${changeIndicator} / ${required}</span>
-                </div>
-            `;
+            
+            reqDiv.appendChild(valueSpan);
+            fragment.appendChild(reqDiv);
         });
-
-        // 添加24小时内的活动数据显示
-        html += `
-            <div class="ld-daily-stats">
-                <div class="ld-daily-stats-title">24小时内的活动</div>
-        `;
-
+        
+        // 创建24小时活动数据
+        const dailyStatsDiv = document.createElement('div');
+        dailyStatsDiv.className = 'ld-daily-stats';
+        
+        const dailyStatsTitleDiv = document.createElement('div');
+        dailyStatsTitleDiv.className = 'ld-daily-stats-title';
+        dailyStatsTitleDiv.textContent = '24小时内的活动';
+        dailyStatsDiv.appendChild(dailyStatsTitleDiv);
+        
         // 添加每个数据项
         const dailyStatsItems = [
             { name: '浏览话题', key: '浏览的话题（所有时间）' },
@@ -580,17 +726,25 @@
 
         dailyStatsItems.forEach(item => {
             const value = dailyChanges[item.key] || 0;
-            html += `
-                <div class="ld-daily-stats-item">
-                    <span class="ld-name">${item.name}</span>
-                    <span class="ld-value">${value}</span>
-                </div>
-            `;
+            
+            const statsItemDiv = document.createElement('div');
+            statsItemDiv.className = 'ld-daily-stats-item';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'ld-name';
+            nameSpan.textContent = item.name;
+            statsItemDiv.appendChild(nameSpan);
+            
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'ld-value';
+            valueSpan.textContent = value;
+            statsItemDiv.appendChild(valueSpan);
+            
+            dailyStatsDiv.appendChild(statsItemDiv);
         });
-
-        html += `</div>`;
-
-        content.innerHTML = html;
+        
+        fragment.appendChild(dailyStatsDiv);
+        content.appendChild(fragment);
     }
 
     // 存储上一次获取的数据，用于比较变化
@@ -603,85 +757,106 @@
             '浏览的话题（所有时间）', // 浏览话题总数
             '回复的话题', // 回复话题数
             '已读帖子（所有时间）', // 已读帖子总数
-            '获赞：点赞用户数量', // 获赞数
-            '点赞的帖子' // 点赞数
+            '获赞：点赞用户数量', // 获得点赞
+            '点赞的帖子' // 点赞帖子
         ];
 
-        // 获取当前时间
-        const now = new Date().getTime();
+        // 从存储中获取之前的记录
+        let dailyStats = GM_getValue('ld_daily_stats', []);
 
-        // 从 localStorage 中获取已存储的数据
-        let dailyStats = JSON.parse(localStorage.getItem('ld_daily_stats') || '[]');
+        // 获取当前时间戳
+        const now = Date.now();
 
-        // 删除超过24小时的数据
-        const oneDayAgo = now - 24 * 60 * 60 * 1000;
-        dailyStats = dailyStats.filter(item => item.timestamp > oneDayAgo);
+        // 清理超过24小时的旧数据
+        dailyStats = dailyStats.filter(stat => now - stat.timestamp < 24 * 60 * 60 * 1000);
 
-        // 对于每个要跟踪的数据项，找到当前值并添加到历史记录中
+        // 提取要跟踪的数据项
+        const trackedStats = requirements.filter(req => statsToTrack.includes(req.name));
+
+        // 为每个要跟踪的项目添加新记录
+        trackedStats.forEach(stat => {
+            dailyStats.push({
+                name: stat.name,
+                value: stat.currentValue,
+                timestamp: now
+            });
+        });
+
+        // 限制每种统计类型的条目数，防止过度存储
+        const MAX_ENTRIES_PER_STAT = 50;
         statsToTrack.forEach(statName => {
-            const req = requirements.find(r => r.name === statName);
-            if (req) {
-                // 添加新的数据点
-                dailyStats.push({
-                    name: statName,
-                    value: req.currentValue,
-                    timestamp: now
-                });
+            const statEntries = dailyStats.filter(item => item.name === statName);
+            if (statEntries.length > MAX_ENTRIES_PER_STAT) {
+                // 只保留最新的 MAX_ENTRIES_PER_STAT 条记录
+                const sortedEntries = statEntries.sort((a, b) => b.timestamp - a.timestamp);
+                const toKeep = sortedEntries.slice(0, MAX_ENTRIES_PER_STAT);
+                // 移除多余条目
+                dailyStats = dailyStats.filter(item => item.name !== statName || toKeep.includes(item));
             }
         });
 
-        // 将更新后的数据保存回 localStorage
-        localStorage.setItem('ld_daily_stats', JSON.stringify(dailyStats));
+        // 保存更新后的数据
+        GM_setValue('ld_daily_stats', dailyStats);
 
-        return calculateDailyChanges(dailyStats);
-    }
-
-    // 计箞24小时内的变化量
-    function calculateDailyChanges(dailyStats) {
-        // 定义要跟踪的数据项
-        const statsToTrack = [
-            '浏览的话题（所有时间）', // 浏览话题总数
-            '回复的话题', // 回复话题数
-            '已读帖子（所有时间）', // 已读帖子总数
-            '获赞：点赞用户数量', // 获赞数
-            '点赞的帖子' // 点赞数
-        ];
-
-        const result = {};
-
-        // 对于每个要跟踪的数据项，计算24小时内的变化
+        // 计算24小时内每项的变化量
+        let changes = {};
         statsToTrack.forEach(statName => {
-            // 过滤出当前数据项的所有记录，并按时间戳排序
-            const statRecords = dailyStats
-                .filter(item => item.name === statName)
-                .sort((a, b) => a.timestamp - b.timestamp);
-
-            if (statRecords.length >= 2) {
-                // 获取最早和最新的记录
-                const oldest = statRecords[0];
-                const newest = statRecords[statRecords.length - 1];
-
-                // 计算变化量
-                const change = newest.value - oldest.value;
-
-                // 存储结果
-                result[statName] = change;
-            } else {
-                // 如果没有足够的数据点，设置为0
-                result[statName] = 0;
+            const stats = dailyStats.filter(stat => stat.name === statName);
+            if (stats.length >= 2) {
+                // 排序数据，最新的在前面
+                stats.sort((a, b) => b.timestamp - a.timestamp);
+                
+                // 获取最新的值
+                const latestValue = stats[0].value;
+                
+                // 获取最老的，但不超过24小时的值
+                const oldestStats = stats.filter(stat => now - stat.timestamp < 24 * 60 * 60 * 1000);
+                if (oldestStats.length > 0) {
+                    oldestStats.sort((a, b) => a.timestamp - b.timestamp);
+                    const oldestValue = oldestStats[0].value;
+                    
+                    // 计算变化
+                    changes[statName] = latestValue - oldestValue;
+                }
             }
         });
 
-        return result;
+        return changes;
     }
 
-    // 初始加载
-    fetchTrustLevelData();
+    // 实现闲置检测，避免页面不活跃时进行不必要的刷新
+    let refreshInterval;
+    let visibilityState = true;
 
-    // 恢复窗口状态
-    // 在所有DOM操作完成后执行，确保 toggleBtn 已经定义
-    setTimeout(restorePanelState, 100);
+    function setupRefreshInterval() {
+        clearInterval(refreshInterval);
+        if (visibilityState) {
+            refreshInterval = setInterval(fetchTrustLevelData, 120000); // 2分钟刷新一次
+        }
+    }
 
-    // 定时刷新（每两分钟）
-    setInterval(fetchTrustLevelData, 120000);
+    // 监听可见性变化
+    document.addEventListener('visibilitychange', () => {
+        visibilityState = document.visibilityState === 'visible';
+        setupRefreshInterval();
+    });
+
+    // 初始化
+    function initialize() {
+        // 恢复面板状态
+        restorePanelState();
+        
+        // 首次获取数据
+        fetchTrustLevelData();
+        
+        // 设置刷新间隔
+        setupRefreshInterval();
+    }
+
+    // 页面加载完成后初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initialize);
+    } else {
+        initialize();
+    }
 })();
