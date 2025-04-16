@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
@@ -292,11 +292,92 @@
 
         .ld-daily-stats-item .ld-name {
             flex: 0 1 auto;
+            color: inherit;
         }
 
         .ld-daily-stats-item .ld-value {
             flex: 0 0 auto;
             font-weight: bold;
+            color: inherit;
+        }
+
+        /* 添加两天数据的样式 */
+        .ld-dual-stats {
+            display: flex;
+            justify-content: flex-end;
+            gap: 5px;
+            min-width: 70px;
+            text-align: right;
+        }
+
+        .ld-day-stat {
+            min-width: 25px;
+            width: 25px;
+            text-align: right;
+            display: inline-block;
+        }
+
+        .ld-day1 {
+            color: #68d391; /* 跟上部一致的绿色 */
+        }
+
+        .ld-day2 {
+            color: #a0aec0; /* 跟上部一致的灰色 */
+        }
+
+        .ld-light-theme .ld-day1 {
+            color: #276749; /* 浅色主题下与主面板绿色一致 */
+        }
+
+        .ld-light-theme .ld-day2 {
+            color: #2d3748; /* 浅色主题下更深的灰色 */
+        }
+
+        .ld-dark-theme .ld-day2 {
+            color: #cbd5e1; /* 深色主题下更亮的灰色，增强可读性 */
+        }
+
+        .ld-trend-indicator {
+            margin-left: 2px;
+            display: inline-block;
+            min-width: 25px;
+            width: 25px;
+            text-align: left;
+        }
+
+        .ld-stats-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 10px;
+            color: inherit;
+        }
+
+        .ld-light-theme .ld-stats-header {
+            color: #2d3748;
+        }
+
+        .ld-dark-theme .ld-stats-header {
+            color: #e2e8f0;
+        }
+
+        .ld-stats-header-cols {
+            display: flex;
+            gap: 5px;
+            min-width: 70px;
+            justify-content: flex-end;
+        }
+
+        .ld-stats-header-col {
+            min-width: 25px;
+            width: 25px;
+            text-align: center;
+        }
+
+        .ld-stats-header-trend {
+            min-width: 25px;
+            width: 25px;
+            text-align: center;
         }
     `;
     document.head.appendChild(style);
@@ -643,7 +724,7 @@
         const resultText = trustLevelSection.querySelector('p.text-red-500, p.text-green-500');
         const isMeetingRequirements = resultText ? !resultText.classList.contains('text-red-500') : false;
 
-        // 存储24小时内的数据变化
+        // 存储48小时内的数据变化
         const dailyChanges = saveDailyStats(requirements);
 
         // 渲染数据
@@ -705,10 +786,18 @@
             `;
         });
 
-        // 添加24小时内的活动数据显示
+        // 添加近期活动数据显示
         html += `
             <div class="ld-daily-stats">
-                <div class="ld-daily-stats-title">24小时内的活动</div>
+                <div class="ld-daily-stats-title">近期的活动</div>
+                <div class="ld-stats-header">
+                    <span></span>
+                    <span class="ld-stats-header-cols">
+                        <span class="ld-stats-header-col">48h</span>
+                        <span class="ld-stats-header-col">24h</span>
+                        <span class="ld-stats-header-trend">↕</span>
+                    </span>
+                </div>
         `;
 
         // 添加每个数据项
@@ -720,16 +809,29 @@
             { name: '点赞帖子', key: '点赞' }
         ];
 
-        console.log('dailyStatsItems:', dailyStatsItems);
-        console.log('dailyChanges:', dailyChanges);
-
         dailyStatsItems.forEach(item => {
-            const value = dailyChanges[item.key] || 0;
-            console.log('数据项：', item.name, '键：', item.key, '值：', value);
+            const data = dailyChanges[item.key] || { day1: 0, day2: 0, trend: 0 };
+            
+            // 创建趋势指示器
+            let trendIndicator = '';
+            if (data.trend > 0) {
+                trendIndicator = `<span class="ld-trend-indicator ld-increase">▲${Math.abs(data.trend)}</span>`;
+            } else if (data.trend < 0) {
+                trendIndicator = `<span class="ld-trend-indicator ld-decrease">▼${Math.abs(data.trend)}</span>`;
+            } else {
+                trendIndicator = `<span class="ld-trend-indicator">0</span>`;
+            }
+            
             html += `
                 <div class="ld-daily-stats-item">
                     <span class="ld-name">${item.name}</span>
-                    <span class="ld-value">${value}</span>
+                    <span class="ld-value">
+                        <span class="ld-dual-stats">
+                            <span class="ld-day-stat ld-day2">${data.day2}</span>
+                            <span class="ld-day-stat ld-day1">${data.day1}</span>
+                            ${trendIndicator}
+                        </span>
+                    </span>
                 </div>
             `;
         });
@@ -742,7 +844,7 @@
     // 存储上一次获取的数据，用于比较变化
     let previousRequirements = [];
 
-    // 存储24小时内的数据变化
+    // 存储48小时内的数据变化
     function saveDailyStats(requirements) {
         // 定义要跟踪的数据项
         const statsToTrack = [
@@ -763,9 +865,9 @@
         // 从 localStorage 中获取已存储的数据
         let dailyStats = JSON.parse(localStorage.getItem('ld_daily_stats') || '[]');
 
-        // 删除超过24小时的数据
-        const oneDayAgo = now - 24 * 60 * 60 * 1000;
-        dailyStats = dailyStats.filter(item => item.timestamp > oneDayAgo);
+        // 删除超过48小时的数据
+        const twoDaysAgo = now - 48 * 60 * 60 * 1000;
+        dailyStats = dailyStats.filter(item => item.timestamp > twoDaysAgo);
 
         // 对于每个要跟踪的数据项，找到当前值并添加到历史记录中
         statsToTrack.forEach(statName => {
@@ -795,7 +897,7 @@
         return calculateDailyChanges(dailyStats);
     }
 
-    // 计箞24小时内的变化量
+    // 计算近两天内的变化量
     function calculateDailyChanges(dailyStats) {
         // 定义要跟踪的数据项
         const statsToTrack = [
@@ -807,27 +909,51 @@
         ];
 
         const result = {};
+        const now = new Date().getTime();
+        const oneDayAgo = now - 24 * 60 * 60 * 1000;
+        const twoDaysAgo = now - 48 * 60 * 60 * 1000;
 
-        // 对于每个要跟踪的数据项，计算24小时内的变化
+        // 对于每个要跟踪的数据项，计算两天内的变化
         statsToTrack.forEach(statName => {
             // 过滤出当前数据项的所有记录，并按时间戳排序
             const statRecords = dailyStats
                 .filter(item => item.name === statName)
                 .sort((a, b) => a.timestamp - b.timestamp);
 
+            // 初始化结果对象结构
+            result[statName] = {
+                day1: 0, // 最近24小时
+                day2: 0, // 24-48小时
+                trend: 0  // 趋势：day1 - day2
+            };
+
             if (statRecords.length >= 2) {
-                // 获取最早和最新的记录
-                const oldest = statRecords[0];
+                // 找出最新记录和其前面两个时间段的记录
                 const newest = statRecords[statRecords.length - 1];
+                
+                // 找最近24小时内最早的记录
+                const oldestDay1 = statRecords.filter(item => item.timestamp > oneDayAgo)[0];
+                
+                // 找24-48小时内最早的记录和最新的记录
+                const recordsDay2 = statRecords.filter(item => 
+                    item.timestamp <= oneDayAgo && item.timestamp > twoDaysAgo);
+                
+                const oldestDay2 = recordsDay2.length > 0 ? recordsDay2[0] : null;
+                const newestDay2 = recordsDay2.length > 0 ? 
+                    recordsDay2[recordsDay2.length - 1] : null;
 
-                // 计算变化量
-                const change = newest.value - oldest.value;
+                // 计算最近24小时的变化
+                if (oldestDay1) {
+                    result[statName].day1 = newest.value - oldestDay1.value;
+                }
 
-                // 存储结果
-                result[statName] = change;
-            } else {
-                // 如果没有足够的数据点，设置为0
-                result[statName] = 0;
+                // 计算24-48小时的变化
+                if (oldestDay2 && newestDay2) {
+                    result[statName].day2 = newestDay2.value - oldestDay2.value;
+                }
+
+                // 计算趋势（今天和昨天的变化差异）
+                result[statName].trend = result[statName].day1 - result[statName].day2;
             }
         });
 
@@ -845,6 +971,6 @@
         updateThemeButtonIcon();
     }, 100);
 
-    // 定时刷新（每两分钟）
-    setInterval(fetchTrustLevelData, 120000);
+    // 定时刷新（每五分钟）
+    setInterval(fetchTrustLevelData, 300000);
 })();
