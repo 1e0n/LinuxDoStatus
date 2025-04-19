@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      1.10
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
@@ -724,7 +724,7 @@
         const resultText = trustLevelSection.querySelector('p.text-red-500, p.text-green-500');
         const isMeetingRequirements = resultText ? !resultText.classList.contains('text-red-500') : false;
 
-        // 存储48小时内的数据变化
+        // 存储自然日的活动数据
         const dailyChanges = saveDailyStats(requirements);
 
         // 渲染数据
@@ -793,8 +793,8 @@
                 <div class="ld-stats-header">
                     <span></span>
                     <span class="ld-stats-header-cols">
-                        <span class="ld-stats-header-col">48h</span>
-                        <span class="ld-stats-header-col">24h</span>
+                        <span class="ld-stats-header-col">昨天</span>
+                        <span class="ld-stats-header-col">今天</span>
                         <span class="ld-stats-header-trend">↕</span>
                     </span>
                 </div>
@@ -844,7 +844,7 @@
     // 存储上一次获取的数据，用于比较变化
     let previousRequirements = [];
 
-    // 存储48小时内的数据变化
+    // 存储自然日的活动数据
     function saveDailyStats(requirements) {
         // 定义要跟踪的数据项
         const statsToTrack = [
@@ -859,45 +859,91 @@
         console.log('数据项名称：', requirements.map(r => r.name));
         console.log('要跟踪的数据项：', statsToTrack);
 
-        // 获取当前时间
-        const now = new Date().getTime();
-
+        // 获取当前时间和日期边界
+        const now = new Date();
+        const currentTime = now.getTime();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); // 今天0点
+        const yesterdayStart = todayStart - (24 * 60 * 60 * 1000); // 昨天0点
+        
         // 从 localStorage 中获取已存储的数据
         let dailyStats = JSON.parse(localStorage.getItem('ld_daily_stats') || '[]');
-
-        // 删除超过48小时的数据
-        const twoDaysAgo = now - 48 * 60 * 60 * 1000;
-        dailyStats = dailyStats.filter(item => item.timestamp > twoDaysAgo);
-
-        // 对于每个要跟踪的数据项，找到当前值并添加到历史记录中
+        
+        // 优化存储：只保留昨天和今天的数据点，且每天只保留自然日的第一个和最后一个数据点
+        const newDailyStats = [];
+        
+        // 对于每个数据项，分别处理
         statsToTrack.forEach(statName => {
+            // 过滤出当前数据项的所有记录
+            const allRecords = dailyStats.filter(item => item.name === statName);
+            if (allRecords.length === 0) {
+                return; // 跳过这个数据项
+            }
+            
+            // 查找今天和昨天自然日范围内的最早和最晚记录
+            const todayRecords = allRecords.filter(item => item.timestamp >= todayStart);
+            const yesterdayRecords = allRecords.filter(item => 
+                item.timestamp >= yesterdayStart && item.timestamp < todayStart);
+            
+            // 处理昨天的数据：只保留最早和最晚的记录
+            if (yesterdayRecords.length > 0) {
+                // 查找昨天的第一条记录
+                const firstRecord = yesterdayRecords.reduce((earliest, current) => 
+                    current.timestamp < earliest.timestamp ? current : earliest, yesterdayRecords[0]);
+                    
+                // 查找昨天的最后一条记录
+                const lastRecord = yesterdayRecords.reduce((latest, current) => 
+                    current.timestamp > latest.timestamp ? current : latest, yesterdayRecords[0]);
+                
+                // 如果最早和最晚的记录不同，则都保留
+                newDailyStats.push(firstRecord);
+                if (lastRecord !== firstRecord) {
+                    newDailyStats.push(lastRecord);
+                }
+            }
+            
+            // 处理今天的数据：保留最早的记录和当前这个最新记录
+            if (todayRecords.length > 0) {
+                // 查找今天的第一条记录
+                const firstRecord = todayRecords.reduce((earliest, current) => 
+                    current.timestamp < earliest.timestamp ? current : earliest, todayRecords[0]);
+                
+                // 保留今天最早的记录
+                newDailyStats.push(firstRecord);
+            }
+            
+            // 添加当前最新记录
             const req = requirements.find(r => r.name === statName);
-            console.log('在requirements中查找数据项：', statName, req ? '找到了' : '未找到');
             if (req) {
                 // 提取数字值
                 const currentMatch = req.current.match(/(\d+)/);
                 const currentValue = currentMatch ? parseInt(currentMatch[1], 10) : 0;
-                console.log('数据项值：', statName, req.current, currentValue);
-
-                // 添加新的数据点
-                dailyStats.push({
+                
+                // 创建新记录
+                const newRecord = {
                     name: statName,
                     value: currentValue,
-                    timestamp: now
-                });
+                    timestamp: currentTime
+                };
+                
+                // 如果今天还没有记录，或者当前值与最新记录不同，则添加
+                const latestRecord = todayRecords.length > 0 ? 
+                    todayRecords.reduce((latest, current) => 
+                        current.timestamp > latest.timestamp ? current : latest, todayRecords[0]) : null;
+                        
+                if (!latestRecord || latestRecord.value !== currentValue) {
+                    newDailyStats.push(newRecord);
+                }
             }
         });
-
-        // 调试信息：输出保存的数据
-        console.log('保存的dailyStats数据：', dailyStats);
-
-        // 将更新后的数据保存回 localStorage
-        localStorage.setItem('ld_daily_stats', JSON.stringify(dailyStats));
-
-        return calculateDailyChanges(dailyStats);
+        
+        // 保存优化后的数据
+        console.log('优化后的存储数据长度:', newDailyStats.length, '(之前:', dailyStats.length, ')');
+        localStorage.setItem('ld_daily_stats', JSON.stringify(newDailyStats));
+        
+        return calculateDailyChanges(newDailyStats);
     }
-
-    // 计算近两天内的变化量
+    
+    // 计算自然日内的活动数据
     function calculateDailyChanges(dailyStats) {
         // 定义要跟踪的数据项
         const statsToTrack = [
@@ -909,55 +955,72 @@
         ];
 
         const result = {};
-        const now = new Date().getTime();
-        const oneDayAgo = now - 24 * 60 * 60 * 1000;
-        const twoDaysAgo = now - 48 * 60 * 60 * 1000;
+        
+        // 获取今天和昨天的日期范围
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); // 今天0点
+        const yesterdayStart = todayStart - (24 * 60 * 60 * 1000); // 昨天0点
+        const yesterdayEnd = todayStart - 1; // 昨天23:59:59
+        
+        console.log('时间范围: ', new Date(todayStart), new Date(yesterdayStart), new Date(yesterdayEnd));
 
-        // 对于每个要跟踪的数据项，计算两天内的变化
+        // 对于每个要跟踪的数据项，计算今天和昨天的变化
         statsToTrack.forEach(statName => {
-            // 过滤出当前数据项的所有记录，并按时间戳排序
-            const statRecords = dailyStats
-                .filter(item => item.name === statName)
-                .sort((a, b) => a.timestamp - b.timestamp);
-
             // 初始化结果对象结构
             result[statName] = {
-                day1: 0, // 最近24小时
-                day2: 0, // 24-48小时
-                trend: 0  // 趋势：day1 - day2
+                day1: 0, // 今天的变化
+                day2: 0, // 昨天的变化
+                trend: 0  // 趋势（今天与昨天的差异）
             };
-
-            if (statRecords.length >= 2) {
-                // 找出最新记录和其前面两个时间段的记录
-                const newest = statRecords[statRecords.length - 1];
-                
-                // 找最近24小时内最早的记录
-                const oldestDay1 = statRecords.filter(item => item.timestamp > oneDayAgo)[0];
-                
-                // 找24-48小时内最早的记录和最新的记录
-                const recordsDay2 = statRecords.filter(item => 
-                    item.timestamp <= oneDayAgo && item.timestamp > twoDaysAgo);
-                
-                const oldestDay2 = recordsDay2.length > 0 ? recordsDay2[0] : null;
-                const newestDay2 = recordsDay2.length > 0 ? 
-                    recordsDay2[recordsDay2.length - 1] : null;
-
-                // 计算最近24小时的变化
-                if (oldestDay1) {
-                    result[statName].day1 = newest.value - oldestDay1.value;
-                }
-
-                // 计算24-48小时的变化
-                if (oldestDay2 && newestDay2) {
-                    result[statName].day2 = newestDay2.value - oldestDay2.value;
-                }
-
-                // 计算趋势（今天和昨天的变化差异）
-                result[statName].trend = result[statName].day1 - result[statName].day2;
+            
+            // 过滤出当前数据项的所有记录
+            const allRecords = dailyStats.filter(item => item.name === statName);
+            if (allRecords.length === 0) {
+                return; // 跳过这个数据项
             }
+            
+            // 查找今天和昨天自然日范围内的最早和最晚记录
+            const todayRecords = allRecords.filter(item => item.timestamp >= todayStart);
+            const yesterdayRecords = allRecords.filter(item => 
+                item.timestamp >= yesterdayStart && item.timestamp <= yesterdayEnd);
+            
+            // 找到今天的最早记录和最新记录
+            const todayFirstRecord = todayRecords.length > 0 ? 
+                todayRecords.reduce((earliest, current) => 
+                    current.timestamp < earliest.timestamp ? current : earliest, todayRecords[0]) : null;
+                    
+            const todayLastRecord = todayRecords.length > 0 ? 
+                todayRecords.reduce((latest, current) => 
+                    current.timestamp > latest.timestamp ? current : latest, todayRecords[0]) : null;
+            
+            // 找到昨天的最早记录和最晚记录
+            const yesterdayFirstRecord = yesterdayRecords.length > 0 ? 
+                yesterdayRecords.reduce((earliest, current) => 
+                    current.timestamp < earliest.timestamp ? current : earliest, yesterdayRecords[0]) : null;
+                    
+            const yesterdayLastRecord = yesterdayRecords.length > 0 ? 
+                yesterdayRecords.reduce((latest, current) => 
+                    current.timestamp > latest.timestamp ? current : latest, yesterdayRecords[0]) : null;
+            
+            // 计算今天的变化值(最新记录 - 今天最早记录或昨天最晚记录)
+            if (todayLastRecord) {
+                const baseValue = todayFirstRecord ? 
+                    todayFirstRecord.value : 
+                    (yesterdayLastRecord ? yesterdayLastRecord.value : 0);
+                
+                result[statName].day1 = todayLastRecord.value - baseValue;
+            }
+            
+            // 计算昨天的变化值(昨天最晚记录 - 昨天最早记录)
+            if (yesterdayFirstRecord && yesterdayLastRecord) {
+                result[statName].day2 = yesterdayLastRecord.value - yesterdayFirstRecord.value;
+            }
+            
+            // 计算趋势（今天与昨天的差异）
+            result[statName].trend = result[statName].day1 - result[statName].day2;
         });
 
-        console.log('dailyChanges result:', result);
+        console.log('自然日变化数据:', result);
         return result;
     }
 
