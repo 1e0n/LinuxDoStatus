@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.10
+// @version      1.11
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
@@ -117,6 +117,43 @@
             transition: all 0.3s ease;
             overflow: hidden;
             font-size: 12px;
+            resize: both;  /* 添加原生resize支持，但我们会使用自定义实现 */
+        }
+
+        /* 添加用于大小调整的样式 */
+        .ld-resize-handle {
+            position: absolute;
+            background: transparent;
+        }
+
+        .ld-resize-handle-right {
+            cursor: e-resize;
+            width: 6px;
+            right: 0;
+            top: 0;
+            height: 100%;
+        }
+
+        .ld-resize-handle-bottom {
+            cursor: s-resize;
+            height: 6px;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+        }
+
+        .ld-resize-handle-corner {
+            cursor: se-resize;
+            width: 12px;
+            height: 12px;
+            right: 0;
+            bottom: 0;
+        }
+
+        /* 正在调整大小时的样式 */
+        .ld-resizing {
+            transition: none !important;
+            user-select: none !important;
         }
 
         #ld-trust-level-header {
@@ -386,6 +423,7 @@
     const STORAGE_KEY_POSITION = 'ld_panel_position';
     const STORAGE_KEY_COLLAPSED = 'ld_panel_collapsed';
     const STORAGE_KEY_THEME = 'ld_panel_theme';
+    const STORAGE_KEY_SIZE = 'ld_panel_size';  // 添加存储大小的键
 
     // 创建面板
     const panel = document.createElement('div');
@@ -394,6 +432,16 @@
     // 设置默认主题
     const currentTheme = GM_getValue(STORAGE_KEY_THEME, 'dark');
     panel.classList.add(currentTheme === 'dark' ? 'ld-dark-theme' : 'ld-light-theme');
+    
+    // 添加用于调整大小的处理程序
+    const resizeHandleRight = document.createElement('div');
+    resizeHandleRight.className = 'ld-resize-handle ld-resize-handle-right';
+    
+    const resizeHandleBottom = document.createElement('div');
+    resizeHandleBottom.className = 'ld-resize-handle ld-resize-handle-bottom';
+    
+    const resizeHandleCorner = document.createElement('div');
+    resizeHandleCorner.className = 'ld-resize-handle ld-resize-handle-corner';
 
     // 获取脚本版本号
     const scriptVersion = GM_info.script.version;
@@ -420,6 +468,10 @@
     // 组装面板
     panel.appendChild(header);
     panel.appendChild(content);
+    // 添加大小调整处理程序
+    panel.appendChild(resizeHandleRight);
+    panel.appendChild(resizeHandleBottom);
+    panel.appendChild(resizeHandleCorner);
     document.body.appendChild(panel);
 
     // 保存窗口位置的函数
@@ -429,6 +481,14 @@
             const matrix = new DOMMatrix(transform);
             GM_setValue(STORAGE_KEY_POSITION, { x: matrix.e, y: matrix.f });
         }
+    }
+
+    // 保存窗口大小的函数
+    function savePanelSize() {
+        GM_setValue(STORAGE_KEY_SIZE, { 
+            width: panel.offsetWidth,
+            height: panel.offsetHeight
+        });
     }
 
     // 保存窗口折叠状态的函数
@@ -453,7 +513,92 @@
         if (position) {
             panel.style.transform = `translate(${position.x}px, ${position.y}px)`;
         }
+
+        // 恢复大小
+        const size = GM_getValue(STORAGE_KEY_SIZE, null);
+        if (size && !isCollapsed) {
+            panel.style.width = `${size.width}px`;
+            panel.style.height = `${size.height}px`;
+        }
     }
+
+    // 处理大小调整
+    let isResizing = false;
+    let resizeType = '';
+    let startX, startY, startWidth, startHeight;
+
+    // 右边调整宽度
+    resizeHandleRight.addEventListener('mousedown', (e) => {
+        if (panel.classList.contains('ld-collapsed')) return;
+        isResizing = true;
+        resizeType = 'right';
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        panel.classList.add('ld-resizing');
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    // 底部调整高度
+    resizeHandleBottom.addEventListener('mousedown', (e) => {
+        if (panel.classList.contains('ld-collapsed')) return;
+        isResizing = true;
+        resizeType = 'bottom';
+        startY = e.clientY;
+        startHeight = panel.offsetHeight;
+        panel.classList.add('ld-resizing');
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    // 角落同时调整宽度和高度
+    resizeHandleCorner.addEventListener('mousedown', (e) => {
+        if (panel.classList.contains('ld-collapsed')) return;
+        isResizing = true;
+        resizeType = 'corner';
+        startX = e.clientX;
+        startY = e.clientY;
+        startWidth = panel.offsetWidth;
+        startHeight = panel.offsetHeight;
+        panel.classList.add('ld-resizing');
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    // 监听鼠标移动以实现调整大小
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        // 右边调整宽度
+        if (resizeType === 'right' || resizeType === 'corner') {
+            const width = startWidth + (e.clientX - startX);
+            if (width >= 150) {  // 设置最小宽度
+                panel.style.width = width + 'px';
+            }
+        }
+
+        // 底部或角落调整高度
+        if (resizeType === 'bottom' || resizeType === 'corner') {
+            const height = startHeight + (e.clientY - startY);
+            if (height >= 100) {  // 设置最小高度
+                panel.style.height = height + 'px';
+            }
+        }
+    });
+
+    // 处理鼠标松开，停止调整大小
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            panel.classList.remove('ld-resizing');
+            document.body.style.userSelect = '';
+            // 保存调整后的大小
+            savePanelSize();
+        }
+    });
 
     // 拖动功能
     let isDragging = false;
