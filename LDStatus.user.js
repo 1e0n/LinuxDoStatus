@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.10
+// @version      1.11
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
@@ -752,7 +752,7 @@
             name = name.replace('已读帖子（所有时间）', '已读帖子(总)');
             name = name.replace('浏览的话题（所有时间）', '浏览话题(总)');
             name = name.replace('获赞：点赞用户数量', '点赞用户数');
-            name = name.replace('获赞：单日最高数量', '单日最高获赞');
+            name = name.replace('获赞：单日最高数量', '总获赞天数');
             name = name.replace('被禁言（过去 6 个月）', '被禁言');
             name = name.replace('被封禁（过去 6 个月）', '被封禁');
 
@@ -938,6 +938,11 @@
         
         // 保存优化后的数据
         console.log('优化后的存储数据长度:', newDailyStats.length, '(之前:', dailyStats.length, ')');
+        console.log('存储的数据详情:', JSON.stringify(newDailyStats.map(item => ({
+            name: item.name,
+            value: item.value,
+            date: new Date(item.timestamp).toLocaleString()
+        }))));
         localStorage.setItem('ld_daily_stats', JSON.stringify(newDailyStats));
         
         return calculateDailyChanges(newDailyStats);
@@ -962,7 +967,11 @@
         const yesterdayStart = todayStart - (24 * 60 * 60 * 1000); // 昨天0点
         const yesterdayEnd = todayStart - 1; // 昨天23:59:59
         
-        console.log('时间范围: ', new Date(todayStart), new Date(yesterdayStart), new Date(yesterdayEnd));
+        console.log('时间范围: ', 
+            '今天起始:', new Date(todayStart).toLocaleString(), 
+            '昨天起始:', new Date(yesterdayStart).toLocaleString(), 
+            '昨天结束:', new Date(yesterdayEnd).toLocaleString()
+        );
 
         // 对于每个要跟踪的数据项，计算今天和昨天的变化
         statsToTrack.forEach(statName => {
@@ -1011,13 +1020,53 @@
                 result[statName].day1 = todayLastRecord.value - baseValue;
             }
             
-            // 计算昨天的变化值(昨天最晚记录 - 昨天最早记录)
+            // 计算昨天的变化值
             if (yesterdayFirstRecord && yesterdayLastRecord) {
+                // 如果昨天有多个记录点，用最晚记录 - 最早记录
                 result[statName].day2 = yesterdayLastRecord.value - yesterdayFirstRecord.value;
+            } else if (yesterdayFirstRecord) {
+                // 如果昨天只有一个记录点，尝试用这个记录点减去前天的最后记录点
+                // 获取前天的结束时间
+                const dayBeforeYesterdayStart = yesterdayStart - (24 * 60 * 60 * 1000); // 前天0点
+                const dayBeforeYesterdayEnd = yesterdayStart - 1; // 前天23:59:59
+                
+                // 查找前天的记录
+                const dayBeforeYesterdayRecords = allRecords.filter(item => 
+                    item.timestamp >= dayBeforeYesterdayStart && item.timestamp <= dayBeforeYesterdayEnd);
+                
+                if (dayBeforeYesterdayRecords.length > 0) {
+                    // 找到前天的最后一条记录
+                    const lastDayBeforeYesterdayRecord = dayBeforeYesterdayRecords.reduce((latest, current) => 
+                        current.timestamp > latest.timestamp ? current : latest, dayBeforeYesterdayRecords[0]);
+                    
+                    // 计算昨天的变化：昨天唯一记录 - 前天最后记录
+                    result[statName].day2 = yesterdayFirstRecord.value - lastDayBeforeYesterdayRecord.value;
+                } else {
+                    // 如果没有前天的记录，则直接使用昨天的记录值作为变化值
+                    // 这是一种近似处理，至少确保昨天的数据不会是0
+                    result[statName].day2 = yesterdayFirstRecord.value;
+                }
             }
             
             // 计算趋势（今天与昨天的差异）
             result[statName].trend = result[statName].day1 - result[statName].day2;
+            
+            // 添加每个数据项的详细日志
+            console.log(`${statName} 数据计算:`, {
+                '今天记录数': todayRecords.length,
+                '昨天记录数': yesterdayRecords.length,
+                '今天第一条': todayFirstRecord ? 
+                    `${todayFirstRecord.value} (${new Date(todayFirstRecord.timestamp).toLocaleString()})` : '无',
+                '今天最后一条': todayLastRecord ? 
+                    `${todayLastRecord.value} (${new Date(todayLastRecord.timestamp).toLocaleString()})` : '无',
+                '昨天第一条': yesterdayFirstRecord ? 
+                    `${yesterdayFirstRecord.value} (${new Date(yesterdayFirstRecord.timestamp).toLocaleString()})` : '无',
+                '昨天最后一条': yesterdayLastRecord ? 
+                    `${yesterdayLastRecord.value} (${new Date(yesterdayLastRecord.timestamp).toLocaleString()})` : '无',
+                '今天变化': result[statName].day1,
+                '昨天变化': result[statName].day2,
+                '趋势': result[statName].trend
+            });
         });
 
         console.log('自然日变化数据:', result);
