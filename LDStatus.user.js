@@ -45,6 +45,23 @@
                 '获赞：单日最高数量': '单日最高获赞',
                 '被禁言（过去 6 个月）': '被禁言',
                 '被封禁（过去 6 个月）': '被封禁'
+            },
+            icons: {
+                SEARCH: '🔎',
+                REFRESH: '🔄',
+                THEME_DARK: '🌙',
+                THEME_LIGHT: '☀️',
+                COLLAPSE: '◀',
+                EXPAND: '▶',
+                LOADING: '⌛',
+                UPDATE_AVAILABLE: '⚠️',
+                UP_TO_DATE: '✔',
+                ERROR: '❌',
+                ARROW_UP: '▲',
+                ARROW_DOWN: '▼',
+                TREND_INCREASE: '▲',
+                TREND_DECREASE: '▼',
+                TREND_STABLE: '–' // Using '–' for better visual than '0'
             }
         },
 
@@ -405,10 +422,10 @@
                     <div class="ld-header-content">
                         <span>Status</span>
                         <span class="ld-version">v${scriptVersion}</span>
-                        <button class="ld-update-btn" title="检查更新">🔎</button>
-                        <button class="ld-refresh-btn" title="刷新数据">🔄</button>
-                        <button class="ld-theme-btn" title="切换主题">🌙</button>
-                        <button class="ld-toggle-btn" title="展开/收起">◀</button>
+                        <button class="ld-update-btn" title="检查更新">${LDStatus.config.icons.SEARCH}</button>
+                        <button class="ld-refresh-btn" title="刷新数据">${LDStatus.config.icons.REFRESH}</button>
+                        <button class="ld-theme-btn" title="切换主题">${LDStatus.config.icons.THEME_DARK}</button>
+                        <button class="ld-toggle-btn" title="展开/收起">${LDStatus.config.icons.COLLAPSE}</button>
                     </div>
                 `;
                 LDStatus.vars.header = header;
@@ -440,7 +457,7 @@
                 if (!themeBtn) return;
 
                 const isDarkTheme = LDStatus.vars.panel.classList.contains('ld-dark-theme');
-                themeBtn.textContent = isDarkTheme ? '🌙' : '☀️'; // 月亮或太阳图标
+                themeBtn.textContent = isDarkTheme ? LDStatus.config.icons.THEME_DARK : LDStatus.config.icons.THEME_LIGHT;
                 themeBtn.title = isDarkTheme ? '切换为亮色主题' : '切换为深色主题';
             },
 
@@ -464,9 +481,21 @@
 
             // 创建进度条
             createProgressBar: function(current, required) {
-                const currentNum = parseInt(current.match(/\d+/)[0], 10);
-                const requiredNum = parseInt(required.match(/\d+/)[0], 10);
-                const percent = Math.min(100, Math.floor((currentNum / requiredNum) * 100));
+                // Ensure current and required are strings before trying to match
+                const currentStr = String(current || ''); // Default to empty string if null/undefined
+                const requiredStr = String(required || ''); // Default to empty string
+
+                const currentNumMatch = currentStr.match(/\d+/);
+                const requiredNumMatch = requiredStr.match(/\d+/);
+
+                // Default to 0 if parsing fails to avoid NaN errors or errors from null[0]
+                const currentNum = (currentNumMatch && currentNumMatch[0]) ? parseInt(currentNumMatch[0], 10) : 0;
+                const requiredNum = (requiredNumMatch && requiredNumMatch[0]) ? parseInt(requiredNumMatch[0], 10) : 0;
+
+                // Avoid division by zero if requiredNum is 0
+                const percent = (requiredNum > 0)
+                    ? Math.min(100, Math.floor((currentNum / requiredNum) * 100))
+                    : (currentNum > 0 ? 100 : 0); // If required is 0, 100% if current > 0, else 0%
 
                 return `
                     <div class="ld-progress-container">
@@ -496,34 +525,29 @@
                         name = name.replace(original, simplified);
                     });
 
-                    // 提取数字部分以简化显示
-                    let current = req.current;
-                    let required = req.required;
-
-                    // 尝试从字符串中提取数字
-                    const currentMatch = req.current.match(/(\d+)/);
-                    const requiredMatch = req.required.match(/(\d+)/);
-
-                    if (currentMatch) current = currentMatch[1];
-                    if (requiredMatch) required = requiredMatch[1];
+                    // For display, use the text directly from req.current and req.required (which are already strings)
+                    // The numerical parsing for logic (currentValue) is done in parseTrustLevelData
+                    // The createProgressBar function will also safely parse numbers from these strings.
+                    let currentTextForDisplay = req.current;
+                    let requiredTextForDisplay = req.required;
 
                     // 添加目标完成数变化的标识
                     let changeIndicator = '';
                     if (req.hasChanged) {
                         const diff = req.changeValue;
                         if (diff > 0) {
-                            changeIndicator = `<span class="ld-increase"> ▲${diff}</span>`;
+                            changeIndicator = `<span class="ld-increase"> ${LDStatus.config.icons.ARROW_UP}${diff}</span>`;
                         } else if (diff < 0) {
-                            changeIndicator = `<span class="ld-decrease"> ▼${Math.abs(diff)}</span>`;
+                            changeIndicator = `<span class="ld-decrease"> ${LDStatus.config.icons.ARROW_DOWN}${Math.abs(diff)}</span>`;
                         }
                     }
 
                     html += `
                         <div class="ld-trust-level-item ${req.isSuccess ? 'ld-success' : 'ld-fail'}">
                             <span class="ld-name">${name}</span>
-                            <span class="ld-value">${current}${changeIndicator} / ${required}</span>
+                            <span class="ld-value">${currentTextForDisplay}${changeIndicator} / ${requiredTextForDisplay}</span>
                         </div>
-                        ${LDStatus.ui.createProgressBar(current, required)}
+                        ${LDStatus.ui.createProgressBar(req.current, req.required)}
                     `;
                 });
 
@@ -551,16 +575,16 @@
                 ];
 
                 dailyStatsItems.forEach(item => {
-                    const data = dailyChanges[item.key] || { day1: 0, day2: 0, trend: 0 };
+                    const data = dailyChanges[item.key] || { changeLast24h: 0, change24hTo48hAgo: 0, trend: 0 };
 
                     // 创建趋势指示器
                     let trendIndicator = '';
                     if (data.trend > 0) {
-                        trendIndicator = `<span class="ld-trend-indicator ld-increase">▲${Math.abs(data.trend)}</span>`;
+                        trendIndicator = `<span class="ld-trend-indicator ld-increase">${LDStatus.config.icons.TREND_INCREASE}${Math.abs(data.trend)}</span>`;
                     } else if (data.trend < 0) {
-                        trendIndicator = `<span class="ld-trend-indicator ld-decrease">▼${Math.abs(data.trend)}</span>`;
+                        trendIndicator = `<span class="ld-trend-indicator ld-decrease">${LDStatus.config.icons.TREND_DECREASE}${Math.abs(data.trend)}</span>`;
                     } else {
-                        trendIndicator = `<span class="ld-trend-indicator">0</span>`;
+                        trendIndicator = `<span class="ld-trend-indicator">${LDStatus.config.icons.TREND_STABLE}</span>`;
                     }
 
                     html += `
@@ -568,8 +592,8 @@
                             <span class="ld-name">${item.name}</span>
                             <span class="ld-value">
                                 <span class="ld-dual-stats">
-                                    <span class="ld-day-stat ld-day2">${data.day2}</span>
-                                    <span class="ld-day-stat ld-day1">${data.day1}</span>
+                                    <span class="ld-day-stat ld-day2">${data.change24hTo48hAgo}</span> 
+                                    <span class="ld-day-stat ld-day1">${data.changeLast24h}</span>
                                     ${trendIndicator}
                                 </span>
                             </span>
@@ -655,11 +679,16 @@
             },
 
             // 解析信任级别数据
+            // Purpose: Fetches HTML from the connect page, parses it to find trust level data,
+            // calculates changes from previously stored data (previousRequirements),
+            // and prepares the data object for rendering and caching.
             parseTrustLevelData: function(html) {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
 
-                // 查找信任级别区块
+                // HTML Structure Assumption:
+                // Assumes the trust level data is within a div with classes '.bg-white.p-6.rounded-lg'.
+                // and contains a h2 element with text including '信任级别'.
                 const trustLevelSection = Array.from(doc.querySelectorAll('.bg-white.p-6.rounded-lg')).find(div => {
                     const heading = div.querySelector('h2');
                     return heading && heading.textContent.includes('信任级别');
@@ -671,67 +700,131 @@
                 }
 
                 // 获取用户名和当前级别
-                const heading = trustLevelSection.querySelector('h2').textContent.trim();
-                const match = heading.match(/(.*) - 信任级别 (\d+) 的要求/);
-                const username = match ? match[1] : '未知用户';
-                const targetLevel = match ? match[2] : '未知';
+                let username = '未知用户';
+                let targetLevel = '未知';
+                const headingElement = trustLevelSection.querySelector('h2');
 
-                // 获取表格数据
-                const tableRows = trustLevelSection.querySelectorAll('table tr');
+                if (headingElement && headingElement.textContent) {
+                    const headingText = headingElement.textContent.trim();
+                    const match = headingText.match(/(.*) - 信任级别 (\d+) 的要求/);
+                    if (match && match[1] && match[2]) {
+                        username = match[1];
+                        targetLevel = match[2];
+                    } else {
+                        console.warn(`LDStatus: Could not parse username and targetLevel from heading: "${headingText}". Using defaults.`);
+                        LDStatus.vars.content.innerHTML = '<div class="ld-loading">数据格式错误（标题解析失败），请检查页面结构或脚本。</div>';
+                        // Depending on how critical this is, you might return or allow proceeding with defaults.
+                    }
+                } else {
+                    console.warn('LDStatus: Trust level heading element not found or has no text content.');
+                    LDStatus.vars.content.innerHTML = '<div class="ld-loading">数据格式错误（未找到标题），请检查页面结构或脚本。</div>';
+                    return; // Stop if critical heading info is missing
+                }
+
+                // HTML Structure Assumption:
+                // Assumes requirements are listed in a <table> within the trustLevelSection.
+                // Each requirement is a <tr>, with <td> elements for name, current progress, and required progress.
+                const tableElement = trustLevelSection.querySelector('table');
+                if (!tableElement) {
+                    console.warn('LDStatus: Trust level table element not found.');
+                    LDStatus.vars.content.innerHTML = '<div class="ld-loading">数据格式错误（未找到表格），请检查页面结构或脚本。</div>';
+                    return; // Stop if table is missing
+                }
+                const tableRows = tableElement.querySelectorAll('tr');
                 const requirements = [];
 
                 for (let i = 1; i < tableRows.length; i++) { // 跳过表头
                     const row = tableRows[i];
                     const cells = row.querySelectorAll('td');
 
-                    if (cells.length >= 3) {
-                        const name = cells[0].textContent.trim();
-                        const current = cells[1].textContent.trim();
-                        const required = cells[2].textContent.trim();
-                        const isSuccess = cells[1].classList.contains('text-green-500');
+                    // Ensure cells and their textContent are valid
+                    if (cells.length >= 3 &&
+                        cells[0] && cells[0].textContent &&
+                        cells[1] && cells[1].textContent &&
+                        cells[2] && cells[2].textContent) {
 
-                        // 提取当前完成数的数字部分
-                        const currentMatch = current.match(/(\d+)/);
-                        const currentValue = currentMatch ? parseInt(currentMatch[1], 10) : 0;
-                        // 查找上一次的数据记录
+                        const name = cells[0].textContent.trim();
+                        const currentText = cells[1].textContent.trim(); // Keep original text for display
+                        const requiredText = cells[2].textContent.trim(); // Keep original text for display
+                        const isSuccess = cells[1].classList ? cells[1].classList.contains('text-green-500') : false;
+
+                        // Robustly extract current value as a number for logic
+                        let currentValue = 0;
+                        const currentNumMatch = currentText.match(/(\d+)/);
+                        if (currentNumMatch && currentNumMatch[0]) {
+                            currentValue = parseInt(currentNumMatch[0], 10);
+                        } else {
+                            console.warn(`LDStatus: Could not parse current value number from: "${currentText}" for item "${name}"`);
+                        }
+
+                        // (Optional: Robustly extract required value as a number if needed for logic later)
+                        // let requiredValue = 0;
+                        // const requiredNumMatch = requiredText.match(/(\d+)/);
+                        // if (requiredNumMatch && requiredNumMatch[0]) {
+                        //     requiredValue = parseInt(requiredNumMatch[0], 10);
+                        // } else {
+                        //     console.warn(`LDStatus: Could not parse required value number from: "${requiredText}" for item "${name}"`);
+                        // }
+
+                        // `previousRequirements` Usage:
+                        // `LDStatus.vars.previousRequirements` stores the full `requirements` array from the *last successful parse*.
+                        // This allows comparison to detect changes in `currentValue` for each requirement.
                         let changeValue = 0;
                         let hasChanged = false;
 
                         if (LDStatus.vars.previousRequirements.length > 0) {
                             const prevReq = LDStatus.vars.previousRequirements.find(pr => pr.name === name);
                             if (prevReq) {
-                                // 如果完成数有变化，更新变化值
+                                // If current numeric value differs from the previous one, calculate the new change.
                                 if (currentValue !== prevReq.currentValue) {
                                     changeValue = currentValue - prevReq.currentValue;
                                     hasChanged = true;
                                 } else if (prevReq.changeValue) {
-                                    // 如果完成数没有变化，但之前有变化值，保留之前的变化值
+                                    // Persisted Change Logic:
+                                    // If current value matches previous, but previous had a change indicator (non-zero changeValue),
+                                    // persist that indicator (changeValue and hasChanged flag).
+                                    // This aligns with the feature: "Even if the value does not change after refresh, the indicator will be preserved."
                                     changeValue = prevReq.changeValue;
                                     hasChanged = true;
                                 }
+                                // If currentValue matches prevReq.currentValue AND prevReq.changeValue was 0,
+                                // then changeValue remains 0 and hasChanged remains false (no new change, no persisted change).
                             }
                         }
 
                         requirements.push({
                             name,
-                            current,
-                            required,
+                            current: currentText, // Use original text for display
+                            required: requiredText, // Use original text for display
                             isSuccess,
-                            currentValue,
-                            changeValue,  // 变化值
-                            hasChanged    // 是否有变化
+                            currentValue, // Parsed number for logic
+                            changeValue,
+                            hasChanged
                         });
+                    } else {
+                        console.warn(`LDStatus: Skipping table row at index ${i} due to insufficient cells or missing text content. Cells found: ${cells.length}.`);
                     }
                 }
 
                 // 获取总体结果
-                const resultText = trustLevelSection.querySelector('p.text-red-500, p.text-green-500');
-                const isMeetingRequirements = resultText ? !resultText.classList.contains('text-red-500') : false;
+                const resultTextElement = trustLevelSection.querySelector('p.text-red-500, p.text-green-500');
+                let isMeetingRequirements = false; // Default to false
+
+                if (resultTextElement && resultTextElement.classList) {
+                    isMeetingRequirements = !resultTextElement.classList.contains('text-red-500');
+                } else {
+                    console.warn('LDStatus: Result text (overall status) element not found or classList is not available. Defaulting to "not meeting requirements".');
+                    // Optionally, inform the user in the panel if this is critical
+                    // LDStatus.ui.showNotice("无法确定总体状态", "warn");
+                }
 
                 // 存储48小时内的数据变化
-                const dailyChanges = this.saveDailyStats(requirements);
+                const dailyChanges = this.saveDailyStats(requirements); // This calculates and stores daily activity.
 
-                // 缓存数据，以备网络问题时使用
+                // Data Caching:
+                // The full parsed data (including calculated changes and daily activity) is cached to GM_setValue.
+                // This allows the panel to display the last known data if the user is offline
+                // or if a subsequent fetch from connect.linux.do fails.
                 GM_setValue(LDStatus.config.storageKeys.lastData, {
                     username,
                     targetLevel,
@@ -744,34 +837,46 @@
                 // 渲染数据
                 LDStatus.ui.renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements, dailyChanges);
 
-                // 保存当前数据作为下次比较的基准
+                // `previousRequirements` Update:
+                // Save the current set of requirements (with their currentValues, changeValues, and hasChanged flags)
+                // to `LDStatus.vars.previousRequirements` for the next fetch cycle's comparison.
+                // A shallow copy is made to prevent modifications to the rendered data from affecting the next comparison.
                 LDStatus.vars.previousRequirements = [...requirements];
             },
 
             // 存储48小时内的数据变化
             saveDailyStats: function(requirements) {
                 const statsToTrack = LDStatus.config.statsToTrack;
-
-                // 获取当前时间
                 const now = new Date().getTime();
-
-                // 从 localStorage 中获取已存储的数据
-                let dailyStats = JSON.parse(localStorage.getItem('ld_daily_stats') || '[]');
-
-                // 删除超过48小时的数据
                 const twoDaysAgo = now - 48 * 60 * 60 * 1000;
-                dailyStats = dailyStats.filter(item => item.timestamp > twoDaysAgo);
 
-                // 对于每个要跟踪的数据项，找到当前值并添加到历史记录中
+                // 1. Load Existing Data
+                let allDailyStats = [];
+                try {
+                    const storedStats = localStorage.getItem('ld_daily_stats');
+                    if (storedStats) {
+                        allDailyStats = JSON.parse(storedStats);
+                        if (!Array.isArray(allDailyStats)) { // Basic validation
+                            console.warn("LDStatus: ld_daily_stats from localStorage was not an array. Resetting.");
+                            allDailyStats = [];
+                        }
+                    }
+                } catch (e) {
+                    console.error("LDStatus: Error parsing ld_daily_stats from localStorage:", e);
+                    allDailyStats = []; // Start fresh if parsing fails
+                }
+
+                // 2. Filter Old Data
+                allDailyStats = allDailyStats.filter(item => item.timestamp > twoDaysAgo);
+
+                // 3. Add New Data
                 statsToTrack.forEach(statName => {
                     const req = requirements.find(r => r.name === statName);
                     if (req) {
-                        // 提取数字值
-                        const currentMatch = req.current.match(/(\d+)/);
-                        const currentValue = currentMatch ? parseInt(currentMatch[1], 10) : 0;
+                        // req.currentValue is already parsed as a number in parseTrustLevelData
+                        const currentValue = req.currentValue;
 
-                        // 添加新的数据点
-                        dailyStats.push({
+                        allDailyStats.push({
                             name: statName,
                             value: currentValue,
                             timestamp: now
@@ -779,13 +884,14 @@
                     }
                 });
 
-                // 清理过量的历史数据
-                this.cleanupStorage(dailyStats);
+                // 4. Clean Up/Limit (ensure cleanupStorage returns the cleaned array)
+                allDailyStats = this.cleanupStorage(allDailyStats); // cleanupStorage sorts and slices
 
-                // 将更新后的数据保存回 localStorage
-                localStorage.setItem('ld_daily_stats', JSON.stringify(dailyStats));
+                // 5. Save Data
+                localStorage.setItem('ld_daily_stats', JSON.stringify(allDailyStats));
 
-                return this.calculateDailyChanges(dailyStats);
+                // Return the result of calculateDailyChanges based on the new allDailyStats
+                return this.calculateDailyChanges(allDailyStats);
             },
 
             // 清理过量的存储数据
@@ -793,63 +899,79 @@
                 const maxItems = LDStatus.config.maxStorageItems;
 
                 if (stats.length > maxItems) {
-                    // 按时间戳排序并只保留最新的数据
+                    // 按时间戳排序并只保留最新的数据 (descending to keep newest)
                     stats.sort((a, b) => b.timestamp - a.timestamp);
-                    return stats.slice(0, maxItems);
+                    return stats.slice(0, maxItems); // Important: it returns the sliced array
                 }
-
-                return stats;
+                return stats; // Return the original array if not over limit
             },
 
             // 计算近两天内的变化量
+            // Purpose: Calculates the net change in tracked statistics over two distinct 24-hour periods:
+            // 1. The most recent 24 hours (Last 24h).
+            // 2. The 24-hour period immediately preceding the "Last 24h" (24h-48h Ago).
+            // It also calculates the 'trend', which is the difference between these two net changes.
+            // Input: dailyStats - Array of objects: { name: string, value: number, timestamp: number }
+            // Output: An object where keys are statNames and values are { changeLast24h, change24hTo48hAgo, trend }.
             calculateDailyChanges: function(dailyStats) {
                 const statsToTrack = LDStatus.config.statsToTrack;
                 const result = {};
                 const now = new Date().getTime();
+
+                // Time Period Definitions:
+                // `oneDayAgo` marks the boundary between "Last 24h" and "24h-48h Ago".
+                // `twoDaysAgo` marks the older boundary for the "24h-48h Ago" period.
                 const oneDayAgo = now - 24 * 60 * 60 * 1000;
                 const twoDaysAgo = now - 48 * 60 * 60 * 1000;
 
-                // 对于每个要跟踪的数据项，计算两天内的变化
                 statsToTrack.forEach(statName => {
-                    // 过滤出当前数据项的所有记录，并按时间戳排序
+                    // Filter records for the current stat and sort them by timestamp (ascending).
+                    // This makes it easier to find the earliest and latest records in a period.
                     const statRecords = dailyStats
                         .filter(item => item.name === statName)
                         .sort((a, b) => a.timestamp - b.timestamp);
 
-                    // 初始化结果对象结构
                     result[statName] = {
-                        day1: 0, // 最近24小时
-                        day2: 0, // 24-48小时
-                        trend: 0  // 趋势：day1 - day2
+                        changeLast24h: 0,     // Net change in value over the most recent 24 hours.
+                        change24hTo48hAgo: 0, // Net change in value over the 24-hour period before the most recent one.
+                        trend: 0              // Difference: changeLast24h - change24hTo48hAgo.
                     };
 
                     if (statRecords.length >= 2) {
-                        // 找出最新记录和其前面两个时间段的记录
+                        // Record Identification:
+                        // `newest`: The absolute latest record available for this statistic.
                         const newest = statRecords[statRecords.length - 1];
 
-                        // 找最近24小时内最早的记录
-                        const oldestDay1 = statRecords.filter(item => item.timestamp > oneDayAgo)[0];
+                        // `oldestLast24h`: The earliest record that falls within the "Last 24h" window (timestamp > oneDayAgo).
+                        // Used as the starting point to calculate change during the most recent 24 hours.
+                        const oldestLast24h = statRecords.filter(item => item.timestamp > oneDayAgo)[0];
 
-                        // 找24-48小时内最早的记录和最新的记录
-                        const recordsDay2 = statRecords.filter(item =>
+                        // Records for the "24h-48h Ago" period.
+                        const records24hTo48hAgo = statRecords.filter(item =>
                             item.timestamp <= oneDayAgo && item.timestamp > twoDaysAgo);
 
-                        const oldestDay2 = recordsDay2.length > 0 ? recordsDay2[0] : null;
-                        const newestDay2 = recordsDay2.length > 0 ?
-                            recordsDay2[recordsDay2.length - 1] : null;
+                        // `oldest24hTo48hAgo`: Earliest record in the "24h-48h Ago" window.
+                        // `newest24hTo48hAgo`: Latest record in the "24h-48h Ago" window.
+                        // These are used to calculate the net change *within* that specific 24-hour slot.
+                        const oldest24hTo48hAgo = records24hTo48hAgo.length > 0 ? records24hTo48hAgo[0] : null;
+                        const newest24hTo48hAgo = records24hTo48hAgo.length > 0 ?
+                            records24hTo48hAgo[records24hTo48hAgo.length - 1] : null;
 
-                        // 计算最近24小时的变化
-                        if (oldestDay1) {
-                            result[statName].day1 = newest.value - oldestDay1.value;
+                        // Change Calculation:
+                        // `changeLast24h`: Net change from the start of the "Last 24h" period to the `newest` record.
+                        if (oldestLast24h) {
+                            result[statName].changeLast24h = newest.value - oldestLast24h.value;
                         }
 
-                        // 计算24-48小时的变化
-                        if (oldestDay2 && newestDay2) {
-                            result[statName].day2 = newestDay2.value - oldestDay2.value;
+                        // `change24hTo48hAgo`: Net change from the start to the end of the "24h-48h Ago" period.
+                        if (oldest24hTo48hAgo && newest24hTo48hAgo) {
+                            result[statName].change24hTo48hAgo = newest24hTo48hAgo.value - oldest24hTo48hAgo.value;
                         }
 
-                        // 计算趋势（今天和昨天的变化差异）
-                        result[statName].trend = result[statName].day1 - result[statName].day2;
+                        // `trend`: Difference between the net change in the last 24h and the net change in the 24h before that.
+                        // A positive trend means activity is increasing more (or decreasing less) in the most recent 24h
+                        // compared to the prior 24h period.
+                        result[statName].trend = result[statName].changeLast24h - result[statName].change24hTo48hAgo;
                     }
                 });
 
@@ -862,7 +984,7 @@
                 const updateBtn = LDStatus.vars.updateBtn;
 
                 // 显示正在检查的状态
-                updateBtn.textContent = '⌛'; // 沙漏图标
+                updateBtn.textContent = LDStatus.config.icons.LOADING;
                 updateBtn.title = '正在检查更新...';
 
                 GM_xmlhttpRequest({
@@ -879,7 +1001,7 @@
                                 // 比较版本
                                 if (remoteVersion > scriptVersion) {
                                     // 有新版本
-                                    updateBtn.textContent = '⚠️'; // 警告图标
+                                    updateBtn.textContent = LDStatus.config.icons.UPDATE_AVAILABLE;
                                     updateBtn.title = `发现新版本 v${remoteVersion}，点击前往更新页面`;
                                     updateBtn.style.color = 'var(--ld-increase-color)'; // 黄色
 
@@ -889,42 +1011,40 @@
                                     };
                                 } else {
                                     // 已是最新版本
-                                    updateBtn.textContent = '✔'; // 勾选图标
-                                    updateBtn.title = '已是最新版本';
+                                    updateBtn.textContent = LDStatus.config.icons.UP_TO_DATE;
+                                    updateBtn.title = '已是最新版本，点击再次检查'; // Updated title for clarity
                                     updateBtn.style.color = 'var(--ld-success-color)'; // 绿色
-
-                                    // 3秒后恢复原样式
-                                    setTimeout(() => {
-                                        updateBtn.textContent = '🔎'; // 放大镜图标
-                                        updateBtn.title = '检查更新';
-                                        updateBtn.style.color = '';
-                                        updateBtn.onclick = LDStatus.events.onUpdateBtnClick;
-                                    }, 3000);
+                                    // Ensure onclick allows re-checking
+                                    updateBtn.onclick = LDStatus.events.onUpdateBtnClick; 
+                                    // Removed setTimeout to make the "up-to-date" state persistent
                                 }
                             } else {
-                                LDStatus.data.handleUpdateError();
+                                // This case means versionMatch failed, treat as an error in parsing response
+                                console.warn("LDStatus: Could not parse version from update check response.");
+                                LDStatus.data.handleUpdateError(); // Call existing error handler
                             }
                         } else {
+                             // HTTP error
+                            console.warn(`LDStatus: Update check HTTP error: ${response.status}`);
                             LDStatus.data.handleUpdateError();
                         }
                     },
-                    onerror: LDStatus.data.handleUpdateError
+                    onerror: function(error) { // Network error
+                        console.warn("LDStatus: Update check network error.", error);
+                        LDStatus.data.handleUpdateError();
+                    }
                 });
             },
 
             // 处理更新检查错误
             handleUpdateError: function() {
                 const updateBtn = LDStatus.vars.updateBtn;
-                updateBtn.textContent = '❌'; // 错误图标
-                updateBtn.title = '检查更新失败，请稍后再试';
+                updateBtn.textContent = LDStatus.config.icons.ERROR;
+                updateBtn.title = '检查更新失败，点击再次检查'; // Updated title for clarity
                 updateBtn.style.color = 'var(--ld-fail-color)'; // 红色
-
-                // 3秒后恢复原样式
-                setTimeout(() => {
-                    updateBtn.textContent = '🔎'; // 放大镜图标
-                    updateBtn.title = '检查更新';
-                    updateBtn.style.color = '';
-                }, 3000);
+                // Ensure onclick allows re-checking
+                updateBtn.onclick = LDStatus.events.onUpdateBtnClick;
+                // Removed setTimeout to make the error state persistent until user interaction
             }
         },
 
@@ -1003,7 +1123,9 @@
             onToggleBtnClick: function() {
                 const panel = LDStatus.vars.panel;
                 panel.classList.toggle('ld-collapsed');
-                LDStatus.vars.toggleBtn.textContent = panel.classList.contains('ld-collapsed') ? '▶' : '◀';
+                LDStatus.vars.toggleBtn.textContent = panel.classList.contains('ld-collapsed')
+                    ? LDStatus.config.icons.EXPAND
+                    : LDStatus.config.icons.COLLAPSE;
 
                 // 保存折叠状态
                 LDStatus.storage.savePanelCollapsedState();
@@ -1095,10 +1217,10 @@
 
                 if (isCollapsed) {
                     LDStatus.vars.panel.classList.add('ld-collapsed');
-                    LDStatus.vars.toggleBtn.textContent = '▶';
+                    LDStatus.vars.toggleBtn.textContent = LDStatus.config.icons.EXPAND;
                 } else {
                     LDStatus.vars.panel.classList.remove('ld-collapsed');
-                    LDStatus.vars.toggleBtn.textContent = '◀';
+                    LDStatus.vars.toggleBtn.textContent = LDStatus.config.icons.COLLAPSE;
                 }
             }
         },
