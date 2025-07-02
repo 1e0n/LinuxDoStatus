@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.11
+// @version      1.12
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
@@ -46,13 +46,7 @@
             color: #a0aec0;
         }
 
-        #ld-trust-level-panel.ld-dark-theme .ld-daily-stats-title {
-            color: #a0aec0;
-        }
 
-        #ld-trust-level-panel.ld-dark-theme .ld-daily-stats-item .ld-value {
-            color: #68d391;
-        }
 
         #ld-trust-level-panel.ld-dark-theme .ld-version {
             color: #a0aec0;
@@ -91,15 +85,7 @@
             color: #4a5568;
         }
 
-        #ld-trust-level-panel.ld-light-theme .ld-daily-stats-title {
-            color: #4a5568;
-            font-weight: bold;
-        }
 
-        #ld-trust-level-panel.ld-light-theme .ld-daily-stats-item .ld-value {
-            color: #2c7a4b;
-            font-weight: bold;
-        }
 
         #ld-trust-level-panel.ld-light-theme .ld-version {
             color: #e2e8f0;
@@ -149,6 +135,11 @@
 
         .ld-trust-level-item {
             margin-bottom: 6px;
+            display: block;
+            width: 100%;
+        }
+
+        .ld-item-content {
             display: flex;
             white-space: nowrap;
             width: 100%;
@@ -261,124 +252,80 @@
             font-weight: bold;
         }
 
-        /* 所有主题下的活动数据区域 */
-        .ld-daily-stats {
-            margin-top: 10px;
-            font-size: 11px;
-        }
 
-        /* 深色主题下的分隔线 */
-        .ld-dark-theme .ld-daily-stats {
-            border-top: 1px solid #4a5568;
-            padding-top: 10px;
-        }
 
-        /* 亮色主题下的分隔线 */
-        .ld-light-theme .ld-daily-stats {
-            border-top: 1px solid #cbd5e0;
-            padding-top: 10px;
-        }
 
-        .ld-daily-stats-title {
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        .ld-daily-stats-item {
-            display: flex;
-            justify-content: space-between;
+        /* 进度条样式 */
+        .ld-progress-bar {
+            height: 3px;
+            width: 100%;
+            margin-top: 2px;
             margin-bottom: 4px;
+            border-radius: 1px;
+            overflow: hidden;
+            background-color: transparent;
+            position: relative;
         }
 
-        .ld-daily-stats-item .ld-name {
-            flex: 0 1 auto;
-            color: inherit;
+        .ld-progress-fill {
+            height: 100%;
+            border-radius: 1px;
+            transition: width 0.3s ease;
+            position: relative;
         }
 
-        .ld-daily-stats-item .ld-value {
-            flex: 0 0 auto;
-            font-weight: bold;
-            color: inherit;
+        /* 正常项目：已完成绿色，未完成红色 */
+        .ld-progress-normal .ld-progress-fill {
+            background-color: #68d391; /* 绿色 - 已完成部分 */
         }
 
-        /* 添加两天数据的样式 */
-        .ld-dual-stats {
-            display: flex;
-            justify-content: flex-end;
-            gap: 5px;
-            min-width: 70px;
-            text-align: right;
+        .ld-progress-normal {
+            background-color: #fc8181; /* 红色 - 未完成部分 */
         }
 
-        .ld-day-stat {
-            min-width: 25px;
-            width: 25px;
-            text-align: right;
-            display: inline-block;
+        /* 反向项目（被举报帖子、发起举报用户）：已完成红色，未完成绿色 */
+        .ld-progress-reverse .ld-progress-fill {
+            background-color: #fc8181; /* 红色 - 已完成部分 */
         }
 
-        .ld-day1 {
-            color: #68d391; /* 跟上部一致的绿色 */
+        .ld-progress-reverse {
+            background-color: #68d391; /* 绿色 - 未完成部分 */
         }
 
-        .ld-day2 {
-            color: #a0aec0; /* 跟上部一致的灰色 */
+        /* 深色主题下的进度条颜色调整 */
+        .ld-dark-theme .ld-progress-normal .ld-progress-fill {
+            background-color: #68d391; /* 绿色 */
         }
 
-        .ld-light-theme .ld-day1 {
-            color: #276749; /* 浅色主题下与主面板绿色一致 */
+        .ld-dark-theme .ld-progress-normal {
+            background-color: #fc8181; /* 红色 */
         }
 
-        .ld-light-theme .ld-day2 {
-            color: #2d3748; /* 浅色主题下更深的灰色 */
+        .ld-dark-theme .ld-progress-reverse .ld-progress-fill {
+            background-color: #fc8181; /* 红色 */
         }
 
-        .ld-dark-theme .ld-day2 {
-            color: #cbd5e1; /* 深色主题下更亮的灰色，增强可读性 */
+        .ld-dark-theme .ld-progress-reverse {
+            background-color: #68d391; /* 绿色 */
         }
 
-        .ld-trend-indicator {
-            margin-left: 2px;
-            display: inline-block;
-            min-width: 25px;
-            width: 25px;
-            text-align: left;
+        /* 亮色主题下的进度条颜色调整 */
+        .ld-light-theme .ld-progress-normal .ld-progress-fill {
+            background-color: #276749; /* 深绿色 */
         }
 
-        .ld-stats-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 6px;
-            font-size: 10px;
-            color: inherit;
+        .ld-light-theme .ld-progress-normal {
+            background-color: #c53030; /* 深红色 */
         }
 
-        .ld-light-theme .ld-stats-header {
-            color: #2d3748;
+        .ld-light-theme .ld-progress-reverse .ld-progress-fill {
+            background-color: #c53030; /* 深红色 */
         }
 
-        .ld-dark-theme .ld-stats-header {
-            color: #e2e8f0;
+        .ld-light-theme .ld-progress-reverse {
+            background-color: #276749; /* 深绿色 */
         }
 
-        .ld-stats-header-cols {
-            display: flex;
-            gap: 5px;
-            min-width: 70px;
-            justify-content: flex-end;
-        }
-
-        .ld-stats-header-col {
-            min-width: 25px;
-            width: 25px;
-            text-align: center;
-        }
-
-        .ld-stats-header-trend {
-            min-width: 25px;
-            width: 25px;
-            text-align: center;
-        }
     `;
     document.head.appendChild(style);
 
@@ -724,18 +671,15 @@
         const resultText = trustLevelSection.querySelector('p.text-red-500, p.text-green-500');
         const isMeetingRequirements = resultText ? !resultText.classList.contains('text-red-500') : false;
 
-        // 存储自然日的活动数据
-        const dailyChanges = saveDailyStats(requirements);
-
         // 渲染数据
-        renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements, dailyChanges);
+        renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements);
 
         // 保存当前数据作为下次比较的基准
         previousRequirements = [...requirements];
     }
 
     // 渲染信任级别数据
-    function renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements, dailyChanges = {}) {
+    function renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements) {
         let html = `
             <div style="margin-bottom: 8px; font-weight: bold;">
                 ${username} - 信任级别 ${targetLevel}
@@ -778,65 +722,34 @@
                 }
             }
 
+            // 计算进度百分比
+            const currentValue = parseInt(current, 10) || 0;
+            const requiredValue = parseInt(required, 10) || 0;
+
+            let progressPercent;
+            if (requiredValue === 0) {
+                // 当目标值为0时，如果当前值也是0，则视为100%完成
+                progressPercent = (currentValue === 0) ? 100 : 0;
+            } else {
+                progressPercent = Math.min((currentValue / requiredValue) * 100, 100);
+            }
+
+            // 判断是否为反向项目（被举报相关）
+            const isReverseItem = name.includes('被举报') || name.includes('发起举报');
+            const progressClass = isReverseItem ? 'ld-progress-reverse' : 'ld-progress-normal';
+
             html += `
                 <div class="ld-trust-level-item ${req.isSuccess ? 'ld-success' : 'ld-fail'}">
-                    <span class="ld-name">${name}</span>
-                    <span class="ld-value">${current}${changeIndicator} / ${required}</span>
+                    <div class="ld-item-content">
+                        <span class="ld-name">${name}</span>
+                        <span class="ld-value">${current}${changeIndicator} / ${required}</span>
+                    </div>
+                    <div class="ld-progress-bar ${progressClass}">
+                        <div class="ld-progress-fill" style="width: ${progressPercent}%"></div>
+                    </div>
                 </div>
             `;
         });
-
-        // 添加近期活动数据显示
-        html += `
-            <div class="ld-daily-stats">
-                <div class="ld-daily-stats-title">近期的活动</div>
-                <div class="ld-stats-header">
-                    <span></span>
-                    <span class="ld-stats-header-cols">
-                        <span class="ld-stats-header-col">昨天</span>
-                        <span class="ld-stats-header-col">今天</span>
-                        <span class="ld-stats-header-trend">↕</span>
-                    </span>
-                </div>
-        `;
-
-        // 添加每个数据项
-        const dailyStatsItems = [
-            { name: '浏览话题', key: '浏览的话题（所有时间）' },
-            { name: '回复话题', key: '回复的话题' },
-            { name: '已读帖子', key: '已读帖子（所有时间）' },
-            { name: '获得点赞', key: '获赞：点赞用户数量' },
-            { name: '点赞帖子', key: '点赞' }
-        ];
-
-        dailyStatsItems.forEach(item => {
-            const data = dailyChanges[item.key] || { day1: 0, day2: 0, trend: 0 };
-            
-            // 创建趋势指示器
-            let trendIndicator = '';
-            if (data.trend > 0) {
-                trendIndicator = `<span class="ld-trend-indicator ld-increase">▲${Math.abs(data.trend)}</span>`;
-            } else if (data.trend < 0) {
-                trendIndicator = `<span class="ld-trend-indicator ld-decrease">▼${Math.abs(data.trend)}</span>`;
-            } else {
-                trendIndicator = `<span class="ld-trend-indicator">0</span>`;
-            }
-            
-            html += `
-                <div class="ld-daily-stats-item">
-                    <span class="ld-name">${item.name}</span>
-                    <span class="ld-value">
-                        <span class="ld-dual-stats">
-                            <span class="ld-day-stat ld-day2">${data.day2}</span>
-                            <span class="ld-day-stat ld-day1">${data.day1}</span>
-                            ${trendIndicator}
-                        </span>
-                    </span>
-                </div>
-            `;
-        });
-
-        html += `</div>`;
 
         content.innerHTML = html;
     }
@@ -844,234 +757,8 @@
     // 存储上一次获取的数据，用于比较变化
     let previousRequirements = [];
 
-    // 存储自然日的活动数据
-    function saveDailyStats(requirements) {
-        // 定义要跟踪的数据项
-        const statsToTrack = [
-            '浏览的话题（所有时间）', // 浏览话题总数
-            '回复的话题', // 回复话题数
-            '已读帖子（所有时间）', // 已读帖子总数
-            '获赞：点赞用户数量', // 获赞数
-            '点赞' // 点赞数
-        ];
-
-        // 调试信息：输出所有数据项的名称
-        console.log('数据项名称：', requirements.map(r => r.name));
-        console.log('要跟踪的数据项：', statsToTrack);
-
-        // 获取当前时间和日期边界
-        const now = new Date();
-        const currentTime = now.getTime();
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); // 今天0点
-        const yesterdayStart = todayStart - (24 * 60 * 60 * 1000); // 昨天0点
-        
-        // 从 localStorage 中获取已存储的数据
-        let dailyStats = JSON.parse(localStorage.getItem('ld_daily_stats') || '[]');
-        
-        // 优化存储：只保留昨天和今天的数据点，且每天只保留自然日的第一个和最后一个数据点
-        const newDailyStats = [];
-        
-        // 对于每个数据项，分别处理
-        statsToTrack.forEach(statName => {
-            // 过滤出当前数据项的所有记录
-            const allRecords = dailyStats.filter(item => item.name === statName);
-            if (allRecords.length === 0) {
-                return; // 跳过这个数据项
-            }
-            
-            // 查找今天和昨天自然日范围内的最早和最晚记录
-            const todayRecords = allRecords.filter(item => item.timestamp >= todayStart);
-            const yesterdayRecords = allRecords.filter(item => 
-                item.timestamp >= yesterdayStart && item.timestamp < todayStart);
-            
-            // 处理昨天的数据：只保留最早和最晚的记录
-            if (yesterdayRecords.length > 0) {
-                // 查找昨天的第一条记录
-                const firstRecord = yesterdayRecords.reduce((earliest, current) => 
-                    current.timestamp < earliest.timestamp ? current : earliest, yesterdayRecords[0]);
-                    
-                // 查找昨天的最后一条记录
-                const lastRecord = yesterdayRecords.reduce((latest, current) => 
-                    current.timestamp > latest.timestamp ? current : latest, yesterdayRecords[0]);
-                
-                // 如果最早和最晚的记录不同，则都保留
-                newDailyStats.push(firstRecord);
-                if (lastRecord !== firstRecord) {
-                    newDailyStats.push(lastRecord);
-                }
-            }
-            
-            // 处理今天的数据：保留最早的记录和当前这个最新记录
-            if (todayRecords.length > 0) {
-                // 查找今天的第一条记录
-                const firstRecord = todayRecords.reduce((earliest, current) => 
-                    current.timestamp < earliest.timestamp ? current : earliest, todayRecords[0]);
-                
-                // 保留今天最早的记录
-                newDailyStats.push(firstRecord);
-            }
-            
-            // 添加当前最新记录
-            const req = requirements.find(r => r.name === statName);
-            if (req) {
-                // 提取数字值
-                const currentMatch = req.current.match(/(\d+)/);
-                const currentValue = currentMatch ? parseInt(currentMatch[1], 10) : 0;
-                
-                // 创建新记录
-                const newRecord = {
-                    name: statName,
-                    value: currentValue,
-                    timestamp: currentTime
-                };
-                
-                // 如果今天还没有记录，或者当前值与最新记录不同，则添加
-                const latestRecord = todayRecords.length > 0 ? 
-                    todayRecords.reduce((latest, current) => 
-                        current.timestamp > latest.timestamp ? current : latest, todayRecords[0]) : null;
-                        
-                if (!latestRecord || latestRecord.value !== currentValue) {
-                    newDailyStats.push(newRecord);
-                }
-            }
-        });
-        
-        // 保存优化后的数据
-        console.log('优化后的存储数据长度:', newDailyStats.length, '(之前:', dailyStats.length, ')');
-        console.log('存储的数据详情:', JSON.stringify(newDailyStats.map(item => ({
-            name: item.name,
-            value: item.value,
-            date: new Date(item.timestamp).toLocaleString()
-        }))));
-        localStorage.setItem('ld_daily_stats', JSON.stringify(newDailyStats));
-        
-        return calculateDailyChanges(newDailyStats);
-    }
-    
-    // 计算自然日内的活动数据
-    function calculateDailyChanges(dailyStats) {
-        // 定义要跟踪的数据项
-        const statsToTrack = [
-            '浏览的话题（所有时间）', // 浏览话题总数
-            '回复的话题', // 回复话题数
-            '已读帖子（所有时间）', // 已读帖子总数
-            '获赞：点赞用户数量', // 获赞数
-            '点赞' // 点赞数
-        ];
-
-        const result = {};
-        
-        // 获取今天和昨天的日期范围
-        const now = new Date();
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); // 今天0点
-        const yesterdayStart = todayStart - (24 * 60 * 60 * 1000); // 昨天0点
-        const yesterdayEnd = todayStart - 1; // 昨天23:59:59
-        
-        console.log('时间范围: ', 
-            '今天起始:', new Date(todayStart).toLocaleString(), 
-            '昨天起始:', new Date(yesterdayStart).toLocaleString(), 
-            '昨天结束:', new Date(yesterdayEnd).toLocaleString()
-        );
-
-        // 对于每个要跟踪的数据项，计算今天和昨天的变化
-        statsToTrack.forEach(statName => {
-            // 初始化结果对象结构
-            result[statName] = {
-                day1: 0, // 今天的变化
-                day2: 0, // 昨天的变化
-                trend: 0  // 趋势（今天与昨天的差异）
-            };
-            
-            // 过滤出当前数据项的所有记录
-            const allRecords = dailyStats.filter(item => item.name === statName);
-            if (allRecords.length === 0) {
-                return; // 跳过这个数据项
-            }
-            
-            // 查找今天和昨天自然日范围内的最早和最晚记录
-            const todayRecords = allRecords.filter(item => item.timestamp >= todayStart);
-            const yesterdayRecords = allRecords.filter(item => 
-                item.timestamp >= yesterdayStart && item.timestamp <= yesterdayEnd);
-            
-            // 找到今天的最早记录和最新记录
-            const todayFirstRecord = todayRecords.length > 0 ? 
-                todayRecords.reduce((earliest, current) => 
-                    current.timestamp < earliest.timestamp ? current : earliest, todayRecords[0]) : null;
-                    
-            const todayLastRecord = todayRecords.length > 0 ? 
-                todayRecords.reduce((latest, current) => 
-                    current.timestamp > latest.timestamp ? current : latest, todayRecords[0]) : null;
-            
-            // 找到昨天的最早记录和最晚记录
-            const yesterdayFirstRecord = yesterdayRecords.length > 0 ? 
-                yesterdayRecords.reduce((earliest, current) => 
-                    current.timestamp < earliest.timestamp ? current : earliest, yesterdayRecords[0]) : null;
-                    
-            const yesterdayLastRecord = yesterdayRecords.length > 0 ? 
-                yesterdayRecords.reduce((latest, current) => 
-                    current.timestamp > latest.timestamp ? current : latest, yesterdayRecords[0]) : null;
-            
-            // 计算今天的变化值(最新记录 - 今天最早记录或昨天最晚记录)
-            if (todayLastRecord) {
-                const baseValue = todayFirstRecord ? 
-                    todayFirstRecord.value : 
-                    (yesterdayLastRecord ? yesterdayLastRecord.value : 0);
-                
-                result[statName].day1 = todayLastRecord.value - baseValue;
-            }
-            
-            // 计算昨天的变化值
-            if (yesterdayFirstRecord && yesterdayLastRecord) {
-                // 如果昨天有多个记录点，用最晚记录 - 最早记录
-                result[statName].day2 = yesterdayLastRecord.value - yesterdayFirstRecord.value;
-            } else if (yesterdayFirstRecord) {
-                // 如果昨天只有一个记录点，尝试用这个记录点减去前天的最后记录点
-                // 获取前天的结束时间
-                const dayBeforeYesterdayStart = yesterdayStart - (24 * 60 * 60 * 1000); // 前天0点
-                const dayBeforeYesterdayEnd = yesterdayStart - 1; // 前天23:59:59
-                
-                // 查找前天的记录
-                const dayBeforeYesterdayRecords = allRecords.filter(item => 
-                    item.timestamp >= dayBeforeYesterdayStart && item.timestamp <= dayBeforeYesterdayEnd);
-                
-                if (dayBeforeYesterdayRecords.length > 0) {
-                    // 找到前天的最后一条记录
-                    const lastDayBeforeYesterdayRecord = dayBeforeYesterdayRecords.reduce((latest, current) => 
-                        current.timestamp > latest.timestamp ? current : latest, dayBeforeYesterdayRecords[0]);
-                    
-                    // 计算昨天的变化：昨天唯一记录 - 前天最后记录
-                    result[statName].day2 = yesterdayFirstRecord.value - lastDayBeforeYesterdayRecord.value;
-                } else {
-                    // 如果没有前天的记录，则直接使用昨天的记录值作为变化值
-                    // 这是一种近似处理，至少确保昨天的数据不会是0
-                    result[statName].day2 = yesterdayFirstRecord.value;
-                }
-            }
-            
-            // 计算趋势（今天与昨天的差异）
-            result[statName].trend = result[statName].day1 - result[statName].day2;
-            
-            // 添加每个数据项的详细日志
-            console.log(`${statName} 数据计算:`, {
-                '今天记录数': todayRecords.length,
-                '昨天记录数': yesterdayRecords.length,
-                '今天第一条': todayFirstRecord ? 
-                    `${todayFirstRecord.value} (${new Date(todayFirstRecord.timestamp).toLocaleString()})` : '无',
-                '今天最后一条': todayLastRecord ? 
-                    `${todayLastRecord.value} (${new Date(todayLastRecord.timestamp).toLocaleString()})` : '无',
-                '昨天第一条': yesterdayFirstRecord ? 
-                    `${yesterdayFirstRecord.value} (${new Date(yesterdayFirstRecord.timestamp).toLocaleString()})` : '无',
-                '昨天最后一条': yesterdayLastRecord ? 
-                    `${yesterdayLastRecord.value} (${new Date(yesterdayLastRecord.timestamp).toLocaleString()})` : '无',
-                '今天变化': result[statName].day1,
-                '昨天变化': result[statName].day2,
-                '趋势': result[statName].trend
-            });
-        });
-
-        console.log('自然日变化数据:', result);
-        return result;
-    }
+    // 清理近期活动相关的localStorage缓存
+    localStorage.removeItem('ld_daily_stats');
 
     // 初始加载
     fetchTrustLevelData();
