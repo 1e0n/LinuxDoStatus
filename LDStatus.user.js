@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LDStatus
 // @namespace    http://tampermonkey.net/
-// @version      1.12
+// @version      1.13
 // @description  在 Linux.do 页面显示信任级别进度
 // @author       1e0n
 // @match        https://linux.do/*
@@ -601,81 +601,190 @@
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
-        // 查找信任级别区块
-        const trustLevelSection = Array.from(doc.querySelectorAll('.bg-white.p-6.rounded-lg')).find(div => {
-            const heading = div.querySelector('h2');
-            return heading && heading.textContent.includes('信任级别');
-        });
-
-        if (!trustLevelSection) {
+        const trustCard = findModernTrustCard(doc);
+        if (!trustCard) {
             content.innerHTML = '<div class="ld-loading">未找到信任级别数据，请确保已登录</div>';
             return;
         }
 
-        // 获取用户名和当前级别
-        const heading = trustLevelSection.querySelector('h2').textContent.trim();
-        const match = heading.match(/(.*) - 信任级别 (\d+) 的要求/);
-        const username = match ? match[1] : '未知用户';
-        const targetLevel = match ? match[2] : '未知';
-
-        // 获取表格数据
-        const tableRows = trustLevelSection.querySelectorAll('table tr');
-        const requirements = [];
-
-        for (let i = 1; i < tableRows.length; i++) { // 跳过表头
-            const row = tableRows[i];
-            const cells = row.querySelectorAll('td');
-
-            if (cells.length >= 3) {
-                const name = cells[0].textContent.trim();
-                const current = cells[1].textContent.trim();
-                const required = cells[2].textContent.trim();
-                const isSuccess = cells[1].classList.contains('text-green-500');
-
-                // 提取当前完成数的数字部分
-                const currentMatch = current.match(/(\d+)/);
-                const currentValue = currentMatch ? parseInt(currentMatch[1], 10) : 0;
-
-                // 查找上一次的数据记录
-                let changeValue = 0;
-                let hasChanged = false;
-
-                if (previousRequirements.length > 0) {
-                    const prevReq = previousRequirements.find(pr => pr.name === name);
-                    if (prevReq) {
-                        // 如果完成数有变化，更新变化值
-                        if (currentValue !== prevReq.currentValue) {
-                            changeValue = currentValue - prevReq.currentValue;
-                            hasChanged = true;
-                        } else if (prevReq.changeValue) {
-                            // 如果完成数没有变化，但之前有变化值，保留之前的变化值
-                            changeValue = prevReq.changeValue;
-                            hasChanged = true;
-                        }
-                    }
-                }
-
-                requirements.push({
-                    name,
-                    current,
-                    required,
-                    isSuccess,
-                    currentValue,
-                    changeValue,  // 变化值
-                    hasChanged    // 是否有变化
-                });
-            }
+        const parsedData = parseModernTrustLevelData(doc, trustCard);
+        if (!parsedData || parsedData.requirements.length === 0) {
+            content.innerHTML = '<div class="ld-loading">解析信任级别数据失败，请稍后重试</div>';
+            return;
         }
 
-        // 获取总体结果
-        const resultText = trustLevelSection.querySelector('p.text-red-500, p.text-green-500');
-        const isMeetingRequirements = resultText ? !resultText.classList.contains('text-red-500') : false;
+        renderTrustLevelData(
+            parsedData.username,
+            parsedData.targetLevel,
+            parsedData.requirements,
+            parsedData.isMeetingRequirements
+        );
+        previousRequirements = [...parsedData.requirements];
+    }
 
-        // 渲染数据
-        renderTrustLevelData(username, targetLevel, requirements, isMeetingRequirements);
+    function findModernTrustCard(doc) {
+        return Array.from(doc.querySelectorAll('.card')).find(card => {
+            const heading = card.querySelector('.card-title, h2');
+            return heading && /信任级别\s*\d+\s*的要求/.test(heading.textContent);
+        });
+    }
 
-        // 保存当前数据作为下次比较的基准
-        previousRequirements = [...requirements];
+    function parseModernTrustLevelData(doc, trustCard) {
+        const headingText = (trustCard.querySelector('.card-title, h2')?.textContent || '').trim();
+        const levelMatch = headingText.match(/信任级别\s*(\d+)\s*的要求/);
+        const targetLevel = levelMatch ? levelMatch[1] : '未知';
+
+        // 新版结构中的用户名优先来自副标题，再从用户菜单兜底
+        const subtitleText = (trustCard.querySelector('.card-subtitle')?.textContent || '').trim();
+        const subtitleUserMatch = subtitleText.match(/(@[^\s·]+)/);
+        const userMenuText = (doc.querySelector('.user-menu-info > div:nth-child(2)')?.textContent || '').trim();
+        const userMenuMatch = userMenuText.match(/(@[^\s·]+)/);
+        const displayName = (doc.querySelector('.user-menu-info .font-semibold')?.textContent || '').trim();
+        const username = subtitleUserMatch?.[1] || userMenuMatch?.[1] || displayName || '未知用户';
+
+        const requirements = [];
+
+        trustCard.querySelectorAll('.tl3-ring').forEach(item => {
+            const name = (item.querySelector('.tl3-ring-label')?.textContent || '').trim();
+            const current = (item.querySelector('.tl3-ring-current')?.textContent || '').trim();
+            const required = (item.querySelector('.tl3-ring-target')?.textContent || '').trim();
+            if (!name) return;
+
+            const currentValue = parseNumberValue(current);
+            const requiredValue = parseNumberValue(required);
+            const circle = item.querySelector('.tl3-ring-circle');
+            const isSuccess = circle ? circle.classList.contains('met') : currentValue >= requiredValue;
+
+            requirements.push({
+                name,
+                current: String(currentValue),
+                required: String(requiredValue),
+                isSuccess
+            });
+        });
+
+        trustCard.querySelectorAll('.tl3-bar-item').forEach(item => {
+            const name = (item.querySelector('.tl3-bar-label')?.textContent || '').trim();
+            const numsText = (item.querySelector('.tl3-bar-nums')?.textContent || '').trim();
+            if (!name) return;
+
+            const { currentValue, requiredValue } = extractCurrentRequired(numsText);
+            const numsNode = item.querySelector('.tl3-bar-nums');
+            const fillNode = item.querySelector('.tl3-bar-fill');
+            const isSuccess = numsNode?.classList.contains('met') || fillNode?.classList.contains('met') || currentValue >= requiredValue;
+
+            requirements.push({
+                name,
+                current: String(currentValue),
+                required: String(requiredValue),
+                isSuccess
+            });
+        });
+
+        trustCard.querySelectorAll('.tl3-quota-card').forEach(item => {
+            const name = (item.querySelector('.tl3-quota-label')?.textContent || '').trim();
+            const numsText = (item.querySelector('.tl3-quota-nums')?.textContent || '').trim();
+            if (!name) return;
+
+            const { currentValue, requiredValue } = extractCurrentRequired(numsText);
+            const isSuccess = item.classList.contains('met') || currentValue <= requiredValue;
+
+            requirements.push({
+                name,
+                current: String(currentValue),
+                required: String(requiredValue),
+                isSuccess
+            });
+        });
+
+        trustCard.querySelectorAll('.tl3-veto-item').forEach(item => {
+            const name = (item.querySelector('.tl3-veto-label')?.textContent || '').trim();
+            const currentText = (item.querySelector('.tl3-veto-value')?.textContent || '').trim();
+            if (!name) return;
+
+            const currentValue = parseNumberValue(currentText);
+            const isSuccess = item.classList.contains('met') || currentValue === 0;
+
+            requirements.push({
+                name,
+                current: String(currentValue),
+                required: '0',
+                isSuccess
+            });
+        });
+
+        const statusNode = trustCard.querySelector('.status-met, .status-unmet');
+        const badgeNode = trustCard.querySelector('.badge');
+        const isMeetingRequirements = statusNode
+            ? statusNode.classList.contains('status-met')
+            : (badgeNode ? !/未达到|未达/.test(badgeNode.textContent) : requirements.every(req => req.isSuccess));
+
+        return {
+            username,
+            targetLevel,
+            requirements: enrichRequirementsWithChanges(requirements),
+            isMeetingRequirements
+        };
+    }
+
+    function parseNumberValue(text) {
+        const normalized = String(text || '').replace(/,/g, '');
+        const match = normalized.match(/-?\d+/);
+        return match ? parseInt(match[0], 10) : 0;
+    }
+
+    function extractCurrentRequired(text) {
+        const normalized = String(text || '').replace(/,/g, '');
+        const parts = normalized.split('/');
+
+        if (parts.length >= 2) {
+            return {
+                currentValue: parseNumberValue(parts[0]),
+                requiredValue: parseNumberValue(parts[1])
+            };
+        }
+
+        const allNums = normalized.match(/-?\d+/g) || [];
+        if (allNums.length >= 2) {
+            return {
+                currentValue: parseInt(allNums[0], 10),
+                requiredValue: parseInt(allNums[1], 10)
+            };
+        }
+
+        return {
+            currentValue: allNums.length === 1 ? parseInt(allNums[0], 10) : 0,
+            requiredValue: 0
+        };
+    }
+
+    function enrichRequirementsWithChanges(requirements) {
+        return requirements.map(req => {
+            const currentValue = parseNumberValue(req.current);
+            let changeValue = 0;
+            let hasChanged = false;
+
+            if (previousRequirements.length > 0) {
+                const prevReq = previousRequirements.find(pr => pr.name === req.name);
+                if (prevReq) {
+                    if (currentValue !== prevReq.currentValue) {
+                        changeValue = currentValue - prevReq.currentValue;
+                        hasChanged = true;
+                    } else if (prevReq.changeValue) {
+                        // 如果完成数没有变化，但之前有变化值，保留之前的变化值
+                        changeValue = prevReq.changeValue;
+                        hasChanged = true;
+                    }
+                }
+            }
+
+            return {
+                ...req,
+                currentValue,
+                changeValue,
+                hasChanged
+            };
+        });
     }
 
     // 渲染信任级别数据
@@ -735,7 +844,7 @@
             }
 
             // 判断是否为反向项目（被举报相关）
-            const isReverseItem = name.includes('被举报') || name.includes('发起举报');
+            const isReverseItem = name.includes('被举报') || name.includes('发起举报') || name.includes('举报用户');
             const progressClass = isReverseItem ? 'ld-progress-reverse' : 'ld-progress-normal';
 
             html += `
